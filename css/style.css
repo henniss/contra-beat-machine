@@ -76,6 +76,8 @@ h2 { font-size: 1.05rem; margin: 28px 0 10px; color: var(--muted); font-weight: 
 .tagline { margin: 4px 0 0; color: var(--muted); }
 .hint { color: var(--muted); font-size: 0.85em; }
 .footer { color: var(--muted); font-size: 0.9rem; padding-top: 24px; padding-bottom: 32px; }
+.footer p { margin: 0 0 6px; }
+.footer a { color: var(--accent); text-underline-offset: 2px; }
 
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
@@ -165,6 +167,38 @@ input[type="range"] { accent-color: var(--accent); width: 100%; margin: 6px 0; }
   border-radius: var(--radius);
 }
 
+/* Covered state: a solid panel over the lamps and readout, same size, so the
+   layout doesn't move. */
+.beat-display { position: relative; cursor: pointer; user-select: none; }
+.beat-display::after {
+  content: "Beat display hidden · click to show";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  border-radius: inherit;
+  color: var(--muted);
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms;
+}
+.beat-display.obscured::after { opacity: 1; }
+.beat-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .lamps { display: flex; align-items: center; gap: 18px; }
 .lamp {
   width: 34px; height: 34px;
@@ -199,7 +233,7 @@ input[type="range"] { accent-color: var(--accent); width: 100%; margin: 6px 0; }
 }
 .parts li.current { background: var(--accent); color: var(--accent-text); }
 .position { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.9rem; }
-.tune-info { margin: 0 0 0 auto; color: var(--muted); font-size: 0.9rem; }
+.tune-info { margin: 0 0 0 auto; padding-top: 18px; color: var(--muted); font-size: 0.9rem; }
 
 /* ---------- presets ---------- */
 
@@ -225,12 +259,13 @@ input[type="range"] { accent-color: var(--accent); width: 100%; margin: 6px 0; }
 
 /* ---------- instruments ---------- */
 
+/* Ten cards: five across on wide screens, two across otherwise. */
 .instruments {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
 }
-@media (max-width: 640px) {
+@media (max-width: 860px) {
   .instruments { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -264,5 +299,5 @@ input[type="range"] { accent-color: var(--accent); width: 100%; margin: 6px 0; }
 .instrument.unavailable .instrument-toggle { cursor: not-allowed; opacity: 0.5; }
 
 @media (prefers-reduced-motion: reduce) {
-  .lamp, .instrument-toggle { transition: none; }
+  .lamp, .instrument-toggle, .beat-display::after { transition: none; }
 }

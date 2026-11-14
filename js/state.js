@@ -3,7 +3,7 @@
 // when the user tweaks something, and making new tunes.
 
 import { generateTune } from './music/tune.js';
-import { randomSeed } from './music/rng.js';
+import { randomSeed, createRng } from './music/rng.js';
 import { DEFAULT_PRESET } from './presets.js';
 
 export function createStore(initial) {
@@ -28,11 +28,24 @@ const cloneMixer = (mixer) =>
 
 export const makeTune = (style, key) => generateTune({ seed: randomSeed(), style, key });
 
+// Fiddle-friendly keys for each mode. Bands often change key between tunes,
+// so each new tune moves to a different key of the same kind.
+export const KEY_FAMILIES = {
+  major: ['D', 'G', 'A'],
+  dorian: ['E', 'A', 'D'],
+  minor: ['E', 'A', 'B'],
+};
+
+export function nextKey(key, rng = createRng(randomSeed())) {
+  const others = KEY_FAMILIES[key.mode].filter((tonic) => tonic !== key.tonic);
+  return { tonic: rng.pick(others), mode: key.mode };
+}
+
 export function initialState(preset = DEFAULT_PRESET) {
   return {
     playing: false,
     masterVolume: 0.8,
-    medley: true,
+    medley: false,
     ...presetFields(preset),
   };
 }
@@ -51,10 +64,13 @@ function presetFields(preset) {
 
 export const applyPreset = (preset) => () => presetFields(preset);
 
-export const withNewTune = () => (state) => ({ tune: makeTune(state.style, state.key) });
+export const withNewTune = () => (state) => {
+  const key = nextKey(state.tune.key);
+  return { key, tune: makeTune(state.style, key) };
+};
 
-// A medley continues in the same style and key.
-export const nextMedleyTune = (tune) => makeTune(tune.style, tune.key);
+// A medley continues in the same style, moving to a new key.
+export const nextMedleyTune = (tune) => makeTune(tune.style, nextKey(tune.key));
 
 export const setBpm = (bpm) => () => ({ bpm, presetId: 'custom' });
 

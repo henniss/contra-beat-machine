@@ -8,7 +8,7 @@ import { createFiddleVoice } from './audio/voices/fiddle.js';
 import { createFluteVoice } from './audio/voices/flute.js';
 import { createPianoVoice } from './audio/voices/piano.js';
 import { createGuitarVoice, createBanjoVoice, createBassVoice } from './audio/voices/pluck.js';
-import { createBodhranVoice, createFeetVoice } from './audio/voices/percussion.js';
+import { createBodhranVoice, createFeetVoice, createMetronomeVoice } from './audio/voices/percussion.js';
 import { createInstructorVoice } from './audio/voices/instructor.js';
 
 const def = (id, name, role, createVoice, trim, reverb) => ({
@@ -24,6 +24,7 @@ export const INSTRUMENTS = [
   def('bass', 'Upright bass', 'bass', createBassVoice, 1.25, 0.05),
   def('bodhran', 'Bodhrán', 'percussion', createBodhranVoice, 0.6, 0.1),
   def('feet', 'Feet', 'percussion', createFeetVoice, 0.75, 0.05),
+  def('metronome', 'Metronome', 'count', createMetronomeVoice, 0.8, 0),
   def('instructor', 'Instructor', 'count', createInstructorVoice, 1, 0),
 ];
 

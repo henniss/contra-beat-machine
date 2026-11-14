@@ -12,6 +12,9 @@ const KEYS = [
   { tonic: 'A', mode: 'major' },
   { tonic: 'E', mode: 'dorian' },
   { tonic: 'A', mode: 'minor' },
+  { tonic: 'A', mode: 'dorian' },
+  { tonic: 'D', mode: 'dorian' },
+  { tonic: 'B', mode: 'minor' },
 ];
 const STYLE_IDS = Object.keys(STYLES);
 const SEEDS = Array.from({ length: 12 }, (_, i) => 1000 + i * 7919);

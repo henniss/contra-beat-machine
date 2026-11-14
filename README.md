@@ -2,7 +2,8 @@
 
 A web page that makes up fiddle tunes for contra dancing and plays them with a
 synthesized band. Pick a preset, press Play, and switch instruments on and off
-while it plays. Four red lamps flash on each dancer step. A readout shows which
+while it plays. Four red lamps flash on each dancer step, and if you want the
+beat spelled out, switch on the metronome or the counting voice. A readout shows which
 part of the tune you're in (A1, A2, B1, B2).
 
 Everything runs in the browser. There is no server, no build step, and no
@@ -72,6 +73,7 @@ starts its vowel begins. Copy those numbers into the offsets table in
   the beat ("boom"), then a short chord between beats ("chuck"). A waltz uses
   "oom-pah-pah" instead.
 - **Medley**: bands play a tune about three times, then roll straight into a
-  new one. Medley mode does the same (twice through for a waltz).
+  new one. Tick the Medley box to do the same (twice through for a waltz);
+  it's off by default, so a tune repeats until you press New tune.
 - **Tempo**: contra dances usually run at 110–122 steps per minute. Beginners
   learn more easily around 100, and waltzes sit around 88–104.

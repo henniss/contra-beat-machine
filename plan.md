@@ -32,7 +32,7 @@ Tempo varies a lot in contra:
 
 **Decision:** BPM slider from 70 to 140, default 116. A small "typical" band is marked on the slider, and it moves with the style: 110–122 for reels and jigs, 88–104 for waltzes. Each preset sets its own BPM, and the user can change it after picking a preset.
 
-### 2.3 Instruments (8 musical instruments, plus the instructor)
+### 2.3 Instruments (8 musical instruments, plus the metronome and the instructor)
 
 | Instrument | Role | What it plays |
 |---|---|---|
@@ -44,11 +44,14 @@ Tempo varies a lot in contra:
 | Upright bass | Bass | Root of the chord, then the fifth, with occasional walk-ups into chord changes. |
 | Bodhrán | Percussion | Irish frame drum. Steady stream of strokes with accents on the beat. |
 | Feet | Percussion | Québécois seated foot-tapping (heel-toe "ta-ka" on the beat and off-beat). |
+| Metronome | Click | A woodblock-style click on every beat, higher and brighter on beat 1 (where lamp 1 lights). Toggle and volume like the other instruments. |
 | Instructor | Spoken count | A voice that says "one, two, three, four" on each beat, matching the four lamps. It's a practice aid, not music. It has an icon, an on/off toggle, and a volume slider, just like the other instruments. |
 
 I'm leaving out mandolin, accordion, and harmonium. They would mostly duplicate the sound of the eight above.
 
-The instructor counts every beat, all the time. In a jig it still counts dancer steps ("one" on lamp 1, and so on), not the three notes within each beat. In a waltz it counts "one, two, three" on each bar. It is off by default in every preset except Beginner Walk-Through.
+The instructor counts every beat, all the time. In a jig it still counts dancer steps ("one" on lamp 1, and so on), not the three notes within each beat. In a waltz it counts "one, two, three" on each bar. It is off by default in every preset. So is the metronome, which follows the same rules: one click per dancer step, with the accent on beat 1 of each four-beat group (or of each bar, in a waltz).
+
+**Rhythm variations.** Each backing instrument (piano, guitar, banjo, bass, bodhrán, feet) has two or three rhythm patterns per style, for example plain boom-chuck, boom-chuck with a push before the next bar, or a walking bass line. The tune's random seed picks one for the A part and one for the B part, so a new tune brings different backing, not just a new melody. The patterns described below are the most common choice for each.
 
 **What each instrument does in a waltz.** Waltzes are gentle, so every pattern gets a softer, sparser version:
 
@@ -61,9 +64,10 @@ The instructor counts every beat, all the time. In a jig it still counts dancer 
 | Upright bass | One long root note per bar, alternating with the fifth on repeated chords. |
 | Bodhrán | A soft stroke on beat 1 and light brushes on beats 2 and 3. |
 | Feet | Heel on beat 1, quiet toe taps on beats 2 and 3. |
+| Metronome | Clicks on all three beats, accented on beat 1. |
 | Instructor | "One, two, three." |
 
-### 2.4 Presets (6)
+### 2.4 Presets (5)
 
 | Preset | Style | Key | BPM | Swing | Instruments on |
 |---|---|---|---|---|---|
@@ -71,7 +75,6 @@ The instructor counts every beat, all the time. In a jig it still counts dancer 
 | Celtic Jig | jig | E minor (dorian) | 112 | none (jigs lilt naturally) | fiddle, flute, guitar, bodhrán |
 | Old-Time Breakdown | reel | A major | 122 | moderate | fiddle, banjo, guitar, bass |
 | Québécois Stomp | reel | G major | 116 | slight | fiddle, piano, feet, bass |
-| Beginner Walk-Through | reel | G major | 100 | none | fiddle, piano, bass, instructor (quieter fiddle, louder piano so the beat is obvious) |
 | Last Waltz | waltz | D major | 96 | none | fiddle, flute, piano, bass |
 
 When you pick a preset, it sets the style, key, BPM, swing, which instruments are on, and their volumes. It also generates a fresh tune in that style. The user can then change anything.
@@ -85,7 +88,8 @@ Every tune is generated from rules, not taken from a recording or score. A rando
 3. **Notes.** Strong positions in the beat (the downbeat and the middle) get a chord tone. Weak positions get scale steps leading toward the next chord tone. Leaps are rare. Notes stay within a comfortable fiddle range. The B part sits higher than the A part, as it usually does in real tunes.
 4. **Rhythm.** Reels mostly run four notes per beat. Occasionally two notes merge into one longer note, or a quick three-note ornament (a "roll") appears. Jigs mostly run three notes per beat, sometimes a long-short pair. Bar 8 always ends on a held note.
 5. **Waltzes follow the same rules, adjusted for 16-bar parts and a slower, singing melody.** Each part is two 8-bar halves. The motif is 4 bars long. Bars 5–8 vary it and end on the half cadence. Bars 9–12 repeat the motif. Bars 13–16 end on the home note. Chord progressions come from a separate library of 16-bar waltz templates, with one chord per bar. Rhythms are mostly one or two notes per beat. The generator mixes in long-short pairs and half notes, and the final bar is one note held for all three beats. Every bar starts on a chord tone, and the melody moves mostly by step, with fewer leaps than a reel.
-6. **Medley.** By default, after three times through, a new tune is generated in the same style and key, and play continues without a gap. Waltzes switch after two times through instead, because one waltz loop is already about two minutes long. A checkbox turns this off.
+6. **New keys.** Each new tune, whether from the New tune button or the medley, moves to a different key of the same kind, as bands often do between tunes: D, G, or A for major presets; E, A, or D for dorian; E, A, or B for minor. A preset always starts in its own key.
+7. **Medley.** Off by default: the current tune repeats until you press New tune. When the medley checkbox is on, a new tune in the same style is generated after three times through, and play continues without a gap. Waltzes switch after two times through instead, because one waltz loop is already about two minutes long.
 
 ## 3. Technical approach
 
@@ -143,9 +147,9 @@ Top to bottom:
 
 1. **Title bar.**
 2. **Transport row:** a big Play/Stop button (the spacebar also works), a New Tune button, the BPM slider with its number shown, a master volume slider, and the medley checkbox.
-3. **Beat display:** four round red lamps. Lamp 1 is slightly larger, because it marks the start of each 4-beat group (or each bar, in a waltz). In a waltz, lamp 4 is disabled: it shows as a faint hollow ring that never lights, and screen readers skip it. The lamps stay in place, so the layout doesn't jump when the style changes. Next to them, a small **phrase readout**: `A1 · A2 · B1 · B2` with the current part highlighted, and "beat 23 / 64". In a waltz it shows "bar 7 / 16" instead, since 192 beats is too many to count usefully. This is a small addition beyond what you asked for. Dancers and callers think in these phrases, so it's useful, but it's cheap to drop if you don't want it.
-4. **Presets:** a row of six cards, each with a name and a one-line description. The active one is highlighted. If the user changes anything afterward, the highlight changes to "Custom".
-5. **Instrument grid:** nine cards (the eight instruments plus the instructor), three across on desktop and two across on phones. Each card has a large **SVG icon button** (click to turn the instrument on or off; it dims and goes grey when off), the instrument name, and a horizontal volume slider. An instrument's icon pulses gently when it plays a note, for visual feedback.
+3. **Beat display:** four round red lamps. Lamp 1 is slightly larger, because it marks the start of each 4-beat group (or each bar, in a waltz). In a waltz, lamp 4 is disabled: it shows as a faint hollow ring that never lights, and screen readers skip it. The lamps stay in place, so the layout doesn't jump when the style changes. Next to them, a small **phrase readout**: `A1 · A2 · B1 · B2` with the current part highlighted, and "beat 23 / 64". In a waltz it shows "bar 7 / 16" instead, since 192 beats is too many to count usefully. Clicking anywhere on the beat display covers it with a plain panel (and clicking again uncovers it), so you can practise keeping time without the lamps. A small Hide/Show button in its corner does the same from the keyboard. This is a small addition beyond what you asked for. Dancers and callers think in these phrases, so it's useful, but it's cheap to drop if you don't want it.
+4. **Presets:** a row of five cards, each with a name and a one-line description. The active one is highlighted. If the user changes anything afterward, the highlight changes to "Custom".
+5. **Instrument grid:** ten cards (the eight instruments, the metronome, and the instructor), five across on desktop and two across on smaller screens. Each card has a large **SVG icon button** (click to turn the instrument on or off; it dims and goes grey when off), the instrument name, and a horizontal volume slider.
 
 Also:
 - Browsers block audio until the user clicks something. The audio system is created on the first Play click.
@@ -159,7 +163,7 @@ These are plain JavaScript objects. The shapes are shown in TypeScript-style not
 // ---- Instruments ----
 type InstrumentId =
   'fiddle' | 'flute' | 'piano' | 'guitar' | 'banjo' | 'bass' | 'bodhran' | 'feet'
-  | 'instructor';
+  | 'metronome' | 'instructor';
 
 interface InstrumentDef {
   id: InstrumentId;
@@ -293,15 +297,15 @@ What each one does:
 - **`css/style.css`**: the layout (a grid that drops from four columns to two on narrow screens), the lamp styles (dark red when off, bright red with a glow when lit, with a fast fade, and a faint hollow ring for the disabled fourth lamp in a waltz), dimmed styling for disabled instruments, slider styling, and light and dark color themes.
 - **`js/main.js`**: the entry point. It builds the initial state from the default preset, generates the first tune, hands everything to the UI, and creates the audio engine on the first Play.
 - **`js/state.js`**: a tiny state store with get, update, and subscribe. It applies a preset, marks the state "Custom" when the user deviates from a preset, and generates the next medley tune.
-- **`js/presets.js`**: the six preset definitions from section 2.4.
+- **`js/presets.js`**: the five preset definitions from section 2.4.
 - **`js/instruments.js`**: the instrument registry. It connects each instrument's name, icon, voice, and pattern function.
-- **`js/icons.js`**: nine simple single-color SVG silhouettes (a head with a speech bubble for the instructor). They are colored through CSS so the dimmed state is one style rule.
-- **`js/ui.js`**: builds the instrument cards and preset cards, and connects the buttons and sliders to the state. It runs the screen-refresh loop that lights the lamps, updates the phrase readout, and pulses the icons. It enables or disables lamp 4, and moves the slider's typical band, whenever the style changes. It also handles the spacebar.
+- **`js/icons.js`**: ten simple single-color SVG silhouettes (a head with a speech bubble for the instructor, a pendulum metronome). They are colored through CSS so the dimmed state is one style rule.
+- **`js/ui.js`**: builds the instrument cards and preset cards, and connects the buttons and sliders to the state. It runs the screen-refresh loop that lights the lamps and updates the phrase readout. It enables or disables lamp 4, and moves the slider's typical band, whenever the style changes. It also handles the spacebar.
 - **`js/audio/engine.js`**: creates the audio system. It builds the mixing chain (per-instrument volume, master volume, compressor, reverb), applies volume and mute changes with short fades, and creates each instrument's voice.
 - **`js/audio/scheduler.js`**: the lookahead scheduler from section 3.2. It handles start and stop, tempo, swing, and the queue of beat times for the UI. It reads the loop length and lamp count from the current tune's style. It also swaps in a new tune at the next bar line, or at the loop boundary for medley changes.
 - **`js/audio/voices/fiddle.js`**, **`flute.js`**, **`piano.js`**: the synthesized voices described in section 3.5.
 - **`js/audio/voices/pluck.js`**: the plucked-string model with its per-pitch buffer cache. It exports three configurations: guitar, banjo, and bass.
-- **`js/audio/voices/percussion.js`**: the bodhrán and feet voices.
+- **`js/audio/voices/percussion.js`**: the bodhrán, feet, and metronome voices.
 - **`js/audio/voices/instructor.js`**: loads and decodes the four count clips. It plays the right clip for each beat, applying the per-clip timing offset and the early fade described in section 3.5. If the clips fail to load, the instructor card shows as unavailable and everything else keeps playing.
 - **`assets/voice/`**: the four count clips. Ogg format is the primary copy. M4A copies exist because older Safari versions can't play Ogg. Each is a few KB.
 - **`scripts/make-voice.sh`**: the one-time script that generates the clips with the text-to-speech program, trims the silence, and compresses them. It also records each clip's timing offset, which is copied into the instructor voice. It isn't needed to run the site.
@@ -472,3 +476,17 @@ No existing files are modified, since there are none.
 ### Phase 11: Documentation
 - [x] `README.md`: what the site is, how to run it locally, how to run the tests, and how to regenerate the voice clips
 - [x] `README.md`: short guide to contra terms (reel, jig, waltz, AABB, 64 beats, boom-chuck)
+
+### Phase 12: Follow-up changes (after first review)
+- [x] Add a metronome instrument: a click on every beat, accented on beat 1, with its own icon, toggle, and volume; off in all presets
+- [x] Test that the metronome clicks once per beat with the accent where lamp 1 lights, in every style
+- [x] Measure the metronome's level in the browser (its peaks match the bodhrán and feet)
+- [x] Remove the Beginner Walk-Through preset (five presets remain)
+- [x] Lay out the ten instrument cards five across on desktop, two across on smaller screens
+- [x] Add an inline page icon, so browsers stop requesting a missing favicon file (it was showing up as a 404 in the server log)
+- [x] Default medley mode to off (the checkbox starts unchecked)
+- [x] Remove the instrument-icon pulse animation (it left small rendering artifacts in Firefox), and the scheduler's per-note tracking that only fed it
+- [x] Click the beat display to cover or uncover it (a solid panel over the lamps and readout, same size, so nothing shifts); a corner Hide/Show button does the same from the keyboard
+- [x] New tune (and the medley) moves to a different key of the same kind each time; tests check the key always changes and stays in its family
+- [x] Give each backing instrument two or three rhythm patterns per style, picked per part from the tune's seed; tests check every pattern gets used and that the backing actually varies
+- [x] Re-measure: over 500 new waltz tunes the piano now plays about 230 different parts (16 before) in 9 different rhythms (1 before)

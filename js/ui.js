@@ -1,6 +1,6 @@
 // Builds the controls, keeps them in step with the app state, and runs the
-// screen-refresh loop that lights the beat lamps and pulses instrument icons
-// at the moment the audio clock reaches each beat or note.
+// screen-refresh loop that lights the beat lamps at the moment the audio clock
+// reaches each beat.
 
 import { INSTRUMENTS } from './instruments.js';
 import { PRESETS } from './presets.js';
@@ -8,8 +8,6 @@ import { STYLES } from './music/styles.js';
 import { keyName } from './music/theory.js';
 
 const LAMP_FLASH_MS = 140;
-const PULSE_MIN_GAP_MS = 90;
-const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const $ = (id) => document.getElementById(id);
 
@@ -27,7 +25,7 @@ function el(tag, props = {}, children = []) {
 
 // actions: togglePlay, newTune, selectPreset, setBpm, setMaster, setMedley,
 //          toggleInstrument, setVolume
-// clock(): null before audio starts, else { now, takeBeats(now), takeNotes(now) }
+// clock(): null before audio starts, else { now, takeBeats(now) }
 export function initUI({ store, actions, clock }) {
   const playButton = $('play');
   const bpmInput = $('bpm');
@@ -54,6 +52,25 @@ export function initUI({ store, actions, clock }) {
     if (typing) return;
     e.preventDefault();
     actions.togglePlay();
+  });
+
+  // ---------- beat display cover ----------
+  // Clicking anywhere on the beat display covers it up (for practising keeping
+  // time without the lamps); clicking again uncovers it. The corner button
+  // does the same from the keyboard.
+
+  const beatDisplay = $('beat-display');
+  const beatToggle = $('beat-toggle');
+  const beatContent = [...beatDisplay.children].filter((child) => child !== beatToggle);
+  beatDisplay.addEventListener('click', () => {
+    const obscured = beatDisplay.classList.toggle('obscured');
+    beatToggle.textContent = obscured ? 'Show' : 'Hide';
+    beatToggle.setAttribute('aria-pressed', String(obscured));
+    beatDisplay.title = obscured ? 'Click to show the beat display' : 'Click to hide the beat display';
+    for (const child of beatContent) {
+      if (obscured) child.setAttribute('aria-hidden', 'true');
+      else child.removeAttribute('aria-hidden');
+    }
   });
 
   // ---------- presets ----------
@@ -93,7 +110,7 @@ export function initUI({ store, actions, clock }) {
     const note = el('p', { class: 'instrument-note', hidden: '' });
     const card = el('div', { class: 'instrument' }, [toggle, el('span', { class: 'instrument-name' }, [inst.name]), slider, note]);
     grid.append(card);
-    cards[inst.id] = { card, toggle, slider, note, lastPulse: 0 };
+    cards[inst.id] = { card, toggle, slider, note };
   }
 
   // ---------- state -> controls ----------
@@ -166,7 +183,7 @@ export function initUI({ store, actions, clock }) {
   render(store.get(), null);
   store.subscribe(render);
 
-  // ---------- beat lamps and icon pulses ----------
+  // ---------- beat lamps ----------
 
   let litUntil = 0;
 
@@ -185,25 +202,11 @@ export function initUI({ store, actions, clock }) {
       : `beat ${beat.beatInLoop} / ${beat.loopBeats}`;
   }
 
-  function pulse(id) {
-    const card = cards[id];
-    const now = performance.now();
-    if (!card || now - card.lastPulse < PULSE_MIN_GAP_MS || reducedMotion()) return;
-    card.lastPulse = now;
-    card.toggle.animate(
-      [{ transform: 'scale(1.07)' }, { transform: 'scale(1)' }],
-      { duration: 140, easing: 'ease-out' },
-    );
-  }
-
   function frame() {
     const c = clock();
     if (c && store.get().playing) {
-      const now = c.now();
-      const beats = c.takeBeats(now);
+      const beats = c.takeBeats(c.now());
       if (beats.length) showBeat(beats[beats.length - 1]);
-      const pulsed = new Set(c.takeNotes(now).map((n) => n.id));
-      pulsed.forEach(pulse);
     }
     if (litUntil && performance.now() > litUntil) {
       lamps.forEach((l) => l.classList.remove('lit'));

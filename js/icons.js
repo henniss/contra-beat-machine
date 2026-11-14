@@ -55,6 +55,11 @@ export const ICONS = {
     <circle cx="41" cy="20.5" r="2" fill="currentColor"/>
     <path d="M46 40l6-4M47 47h7M46 54l6 4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>`),
 
+  metronome: svg(`
+    <path fill="currentColor" fill-rule="evenodd" d="M24 4h16l12 54H12z M27 10l-6 42h22l-1.5-10.5z"/>
+    <path d="M32 50 L47 14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+    <path fill="currentColor" d="M38 26h8v6h-8z" transform="rotate(23 42 29)"/>`),
+
   instructor: svg(`
     <circle cx="22" cy="24" r="9" fill="currentColor"/>
     <path fill="currentColor" d="M6 58c0-12 7-20 16-20s16 8 16 20z"/>

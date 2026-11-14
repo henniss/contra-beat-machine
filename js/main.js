@@ -38,7 +38,7 @@ async function ensureAudio() {
   await engine.start();
   scheduler = new Scheduler(engine, {
     onTuneStart: (tune) => {
-      if (store.get().tune !== tune) store.update({ tune });
+      if (store.get().tune !== tune) store.update({ tune, key: tune.key });
     },
     nextMedley: (tune) => bundle(nextMedleyTune(tune)),
   });
@@ -99,7 +99,6 @@ const ui = initUI({
     ? {
       now: () => engine.ctx.currentTime,
       takeBeats: (now) => scheduler.takeBeats(now),
-      takeNotes: (now) => scheduler.takeNotes(now),
     }
     : null),
 });

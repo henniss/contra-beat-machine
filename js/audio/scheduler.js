@@ -3,8 +3,8 @@
 // audio clock. Time advances one tick (1/12 beat) at a time at the current BPM,
 // so tempo changes take effect immediately without re-timing anything.
 //
-// It also records when each beat and note will sound, so the UI can light the
-// lamps in step with what you hear rather than with when notes were booked.
+// It also records when each beat will sound, so the UI can light the lamps in
+// step with what you hear rather than with when notes were booked.
 
 import { styleSpec, barTicks, partTicks, loopTicks, TICKS_PER_BEAT } from '../music/styles.js';
 
@@ -37,7 +37,6 @@ export class Scheduler {
     this.pending = null;
     this.prepared = null;
     this.beats = [];
-    this.notes = [];
   }
 
   // Plays `bundle` now if stopped, or from the next bar line if playing.
@@ -89,7 +88,6 @@ export class Scheduler {
     this.timer = null;
     this.engine.fadeOut();
     this.beats = [];
-    this.notes = [];
     if (this.pending) {
       this.install(this.pending, null);
       this.pending = null;
@@ -118,7 +116,6 @@ export class Scheduler {
       const voice = this.engine.voices[id];
       if (!voice) continue;
       voice.play(ev, time + swingOffset, secondsPerTick);
-      this.push(this.notes, { time: time + swingOffset, id });
     }
 
     this.nextTime += secondsPerTick;
@@ -162,18 +159,10 @@ export class Scheduler {
     if (queue.length > MAX_QUEUE) queue.shift();
   }
 
-  // Remove and return queued items whose time has come.
-  static drain(queue, now) {
-    let n = 0;
-    while (n < queue.length && queue[n].time <= now) n++;
-    return queue.splice(0, n);
-  }
-
+  // Remove and return the beats whose time has come.
   takeBeats(now) {
-    return Scheduler.drain(this.beats, now);
-  }
-
-  takeNotes(now) {
-    return Scheduler.drain(this.notes, now);
+    let n = 0;
+    while (n < this.beats.length && this.beats[n].time <= now) n++;
+    return this.beats.splice(0, n);
   }
 }

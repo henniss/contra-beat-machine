@@ -1,7 +1,7 @@
-// The six starting points from the plan. A preset sets the style, key, tempo,
+// The five starting points from the plan. A preset sets the style, key, tempo,
 // swing, and which instruments are on at what volume.
 
-const ALL_IDS = ['fiddle', 'flute', 'piano', 'guitar', 'banjo', 'bass', 'bodhran', 'feet', 'instructor'];
+const ALL_IDS = ['fiddle', 'flute', 'piano', 'guitar', 'banjo', 'bass', 'bodhran', 'feet', 'metronome', 'instructor'];
 
 function mixer(on, volumes = {}) {
   return Object.fromEntries(ALL_IDS.map((id) => [id, { enabled: on.includes(id), volume: volumes[id] ?? 0.75 }]));
@@ -47,16 +47,6 @@ export const PRESETS = [
     bpm: 116,
     swing: 0.08,
     mixer: mixer(['fiddle', 'piano', 'feet', 'bass'], { feet: 0.85 }),
-  },
-  {
-    id: 'beginner-walk-through',
-    name: 'Beginner Walk-Through',
-    description: 'Slow and steady, with a loud beat and a voice counting along.',
-    style: 'reel',
-    key: { tonic: 'G', mode: 'major' },
-    bpm: 100,
-    swing: 0,
-    mixer: mixer(['fiddle', 'piano', 'bass', 'instructor'], { fiddle: 0.55, piano: 0.95, bass: 0.8, instructor: 0.9 }),
   },
   {
     id: 'last-waltz',

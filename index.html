@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Contra Beat Machine</title>
   <meta name="description" content="Synthesized backing music for contra dancing: reels, jigs, and waltzes.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23ff3b2f'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -36,12 +37,13 @@
       </div>
 
       <label class="checkbox">
-        <input id="medley" type="checkbox" checked>
+        <input id="medley" type="checkbox">
         <span>Medley <span class="hint">(new tune every few times through)</span></span>
       </label>
     </section>
 
-    <section class="beat-display" aria-label="Beat display">
+    <section id="beat-display" class="beat-display" aria-label="Beat display" title="Click to hide the beat display">
+      <button id="beat-toggle" class="beat-toggle" type="button" aria-pressed="false">Hide</button>
       <div id="lamps" class="lamps" role="group" aria-label="Beat lights">
         <span class="lamp lamp-first" role="img" aria-label="Beat 1"></span>
         <span class="lamp" role="img" aria-label="Beat 2"></span>
@@ -70,6 +72,8 @@
 
   <footer class="footer">
     <p>Every tune is generated on the spot. Space bar plays and stops.</p>
+    <p>Inspired by <a href="https://salsabeatmachine.org/" target="_blank" rel="noopener">Salsa Beat Machine</a>.</p>
+    <p>Coded by Claude. The human in the loop has zero musical talent or ear.</p>
   </footer>
 
   <script type="module" src="js/main.js"></script>

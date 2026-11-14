@@ -1,6 +1,6 @@
-// Bodhrán (Irish frame drum) and Québécois foot-tapping, built from a falling
-// sine "thump" plus a burst of filtered noise. Also provides the shared noise
-// buffer that other voices use for breath and hammer sounds.
+// Bodhrán (Irish frame drum), Québécois foot-tapping, and the metronome click,
+// built from short sine tones and bursts of filtered noise. Also provides the
+// shared noise buffer that other voices use for breath and hammer sounds.
 
 const noiseCache = new WeakMap();
 
@@ -57,6 +57,18 @@ export function createBodhranVoice(ctx, output) {
       const v = ev.velocity;
       thump(ctx, output, when, { from: s.from, to: s.to, sweep: 0.1, level: s.level * v, decay: s.decay });
       noiseBurst(ctx, output, when, { type: 'bandpass', frequency: s.noiseFreq, Q: 0.8, level: s.noise * v, decay: 0.03 });
+    },
+  };
+}
+
+// A woodblock-style click, higher and brighter on the first beat of each group.
+export function createMetronomeVoice(ctx, output) {
+  return {
+    play(ev, when) {
+      const accent = ev.articulation === 'accent';
+      const v = ev.velocity;
+      thump(ctx, output, when, { from: accent ? 1760 : 1320, to: accent ? 1700 : 1280, sweep: 0.02, level: 0.5 * v, decay: 0.05 });
+      noiseBurst(ctx, output, when, { type: 'highpass', frequency: 3000, level: 0.25 * v, decay: 0.012 });
     },
   };
 }
