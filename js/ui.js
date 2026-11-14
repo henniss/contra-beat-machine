@@ -6,6 +6,7 @@ import { INSTRUMENTS } from './instruments.js';
 import { PRESETS } from './presets.js';
 import { STYLES } from './music/styles.js';
 import { keyName } from './music/theory.js';
+import { describeInstrument } from './music/descriptions.js';
 
 const LAMP_FLASH_MS = 140;
 
@@ -108,9 +109,13 @@ export function initUI({ store, actions, clock }) {
       oninput: (e) => actions.setVolume(inst.id, Number(e.target.value) / 100),
     });
     const note = el('p', { class: 'instrument-note', hidden: '' });
-    const card = el('div', { class: 'instrument' }, [toggle, el('span', { class: 'instrument-name' }, [inst.name]), slider, note]);
+    // What this instrument plays in the current tune; the tooltip explains it.
+    const part = el('span', { class: 'instrument-part' });
+    const card = el('div', { class: 'instrument' }, [
+      toggle, el('span', { class: 'instrument-name' }, [inst.name]), part, slider, note,
+    ]);
     grid.append(card);
-    cards[inst.id] = { card, toggle, slider, note };
+    cards[inst.id] = { card, toggle, slider, note, part };
   }
 
   // ---------- state -> controls ----------
@@ -175,6 +180,11 @@ export function initUI({ store, actions, clock }) {
     }
     if (!prev || state.tune !== prev.tune) {
       tuneInfo.textContent = `${STYLES[state.tune.style].name} in ${keyName(state.tune.key)} · tune #${state.tune.seed.toString(36)}`;
+      for (const inst of INSTRUMENTS) {
+        const { name, detail } = describeInstrument(state.tune, inst.id);
+        cards[inst.id].part.textContent = name;
+        cards[inst.id].part.title = detail;
+      }
     }
     if (!prev || state.medley !== prev.medley) $('medley').checked = state.medley;
     if (!prev || state.masterVolume !== prev.masterVolume) $('master').value = Math.round(state.masterVolume * 100);

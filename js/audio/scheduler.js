@@ -41,8 +41,18 @@ export class Scheduler {
 
   // Plays `bundle` now if stopped, or from the next bar line if playing.
   load(bundle) {
+    this.prepare(bundle);
     if (this.running && this.current) this.pending = bundle;
     else this.install(bundle, null);
+  }
+
+  // Let voices pre-render the notes this tune uses (see voices/prerender.js),
+  // in the background and well before they're needed.
+  prepare(bundle) {
+    const secondsPerTick = 60 / this.bpm / TICKS_PER_BEAT;
+    for (const [id, events] of Object.entries(bundle.arrangement)) {
+      this.engine.voices[id]?.prepare?.(events, secondsPerTick);
+    }
   }
 
   install(bundle, time) {
@@ -131,6 +141,7 @@ export class Scheduler {
     if (this.loopCount === repeats - 1 && !this.prepared) {
       // Build the next tune a whole loop early, so the handover costs nothing.
       this.prepared = this.nextMedley(this.current.tune);
+      this.prepare(this.prepared);
     }
     if (this.loopCount >= repeats) {
       const next = this.prepared ?? this.nextMedley(this.current.tune);

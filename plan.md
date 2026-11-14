@@ -490,3 +490,7 @@ No existing files are modified, since there are none.
 - [x] New tune (and the medley) moves to a different key of the same kind each time; tests check the key always changes and stays in its family
 - [x] Give each backing instrument two or three rhythm patterns per style, picked per part from the tune's seed; tests check every pattern gets used and that the backing actually varies
 - [x] Re-measure: over 500 new waltz tunes the piano now plays about 230 different parts (16 before) in 9 different rhythms (1 before)
+- [x] Shareable tune links: the address bar holds `#preset-or-style/key/tune-number`, and opening it plays the same tune (this was listed under future work)
+- [x] Metronome: the same click on every beat, with no accent on beat 1 (changed at the user's request; section 2.3 above describes the original accented version)
+- [x] Each instrument card shows the pattern it's playing in the current tune, with a tooltip describing it; a test checks every rhythm variant has a description
+- [x] Fix crackling after several minutes of play in Firefox: notes are pre-rendered once per pitch (OfflineAudioContext, same sound recipe) and replayed with two live nodes, and finished nodes are disconnected straight away. Measured: same loudness (within 0.3 dB); live nodes per second down from 115 to 15 for the piano, 51 to 14 for the flute, 29 to 14 for the fiddle, about half for the percussion. Deviation: pre-rendered fiddle notes use one fixed brightness rather than varying slightly with velocity.

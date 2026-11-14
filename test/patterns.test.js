@@ -93,14 +93,14 @@ test('the instructor counts every beat: 1-4 in reels and jigs, 1-3 in waltzes', 
   }
 });
 
-test('the metronome clicks every beat, accented where lamp 1 lights', () => {
+test('the metronome plays the same click on every beat', () => {
   for (const { tune, arrangement } of arrangements()) {
     const clicks = arrangement.metronome;
-    const lamps = STYLES[tune.style].lamps;
     assert.equal(clicks.length, loopTicks(tune.style) / 12);
     clicks.forEach((e, i) => {
       assert.equal(e.tick, i * 12);
-      assert.equal(e.articulation, i % lamps === 0 ? 'accent' : 'normal');
+      assert.equal(e.velocity, clicks[0].velocity);
+      assert.equal(e.articulation, undefined);
     });
   }
 });

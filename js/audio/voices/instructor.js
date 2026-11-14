@@ -1,6 +1,7 @@
 // The instructor: recorded "one" .. "four" clips, booked on the audio clock like
 // any note so the count stays locked to the beat. Each clip starts a little
 // early so its vowel, not its opening consonant, lands on the beat.
+import { releaseWhenDone } from './prerender.js';
 
 // From scripts/make-voice.sh (seconds from clip start to the vowel), with
 // "one" corrected after measuring the decoded clip in the browser.
@@ -66,6 +67,7 @@ export function createInstructorVoice(ctx, output) {
       gain.connect(output);
       src.start(start, skip);
       src.stop(end + 0.01);
+      releaseWhenDone(src, gain);
     },
   };
 

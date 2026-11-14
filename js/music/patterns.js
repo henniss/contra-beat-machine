@@ -368,16 +368,10 @@ export function feetPattern(tune) {
   return out;
 }
 
-// One click per beat, accented where lamp 1 lights.
+// The same click on every beat.
 export function metronomePattern(tune) {
-  const { lamps } = styleSpec(tune.style);
-  const out = [];
   const beats = loopTicks(tune.style) / TICKS_PER_BEAT;
-  for (let beat = 0; beat < beats; beat++) {
-    const first = beat % lamps === 0;
-    out.push(ev(beat * TICKS_PER_BEAT, 3, undefined, first ? 1 : 0.7, first ? 'accent' : 'normal'));
-  }
-  return out;
+  return Array.from({ length: beats }, (_, beat) => ev(beat * TICKS_PER_BEAT, 3, undefined, 0.85));
 }
 
 export function instructorPattern(tune) {

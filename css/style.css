@@ -292,6 +292,15 @@ input[type="range"] { accent-color: var(--accent); width: 100%; margin: 6px 0; }
 .instrument-toggle svg { width: 64px; height: 64px; }
 .instrument-toggle[aria-pressed="true"] { color: var(--icon-on); border-color: var(--accent); background: var(--surface); }
 .instrument-name { font-weight: 700; }
+.instrument-part {
+  margin-top: -4px;
+  font-size: 0.75rem;
+  line-height: 1.25;
+  color: var(--muted);
+  text-align: center;
+  cursor: help;
+  min-height: 2.5em; /* two lines, so sliders line up across cards */
+}
 .instrument:not(.on) .instrument-name { color: var(--muted); }
 .instrument input[type="range"] { width: 100%; }
 .instrument:not(.on) input[type="range"] { opacity: 0.55; }

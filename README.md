@@ -60,7 +60,10 @@ starts its vowel begins. Copy those numbers into the offsets table in
 | `js/` | Instruments, presets, app state, the user interface, and the entry point |
 | `test/` | Tests for the music logic |
 
-`plan.md` describes the design and the decisions behind it.
+`MUSIC.md` explains the musical choices and why they were made, for readers
+with no musical background. `CODE.md` is a guide for maintainers: how the code
+fits together and how to make common changes. `plan.md` is the original design
+document and build log.
 
 ## A short guide to contra music
 

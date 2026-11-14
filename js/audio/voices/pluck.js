@@ -4,6 +4,7 @@
 // once into a buffer and cached, so playing a note just replays the buffer.
 
 import { midiToFreq } from '../../music/theory.js';
+import { releaseWhenDone } from './prerender.js';
 
 export const PLUCK_CONFIGS = {
   guitar: {
@@ -91,6 +92,7 @@ export function createPluckVoice(ctx, output, config) {
     env.connect(input);
     src.start(when);
     src.stop(Math.min(when + buffer.duration, when + dur + config.release * 2));
+    releaseWhenDone(src, env);
   }
 
   return {
