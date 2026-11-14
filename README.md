@@ -6,6 +6,12 @@ while it plays. Four red lamps flash on each dancer step, and if you want the
 beat spelled out, switch on the metronome or the counting voice. A readout shows which
 part of the tune you're in (A1, A2, B1, B2).
 
+The address bar always holds a link to the tune that's playing, for example
+`/#old-time-breakdown/A-major/1x2k9f`: the preset (or just the style, once
+you've changed the band), the key, and the tune number. Open that link later
+to hear the same tune again. Without the part after `#`, the page starts a
+fresh random tune.
+
 Everything runs in the browser. There is no server, no build step, and no
 libraries. Every instrument is synthesized live with the Web Audio API. The
 only recordings are four tiny clips of a voice counting "one, two, three,

@@ -64,6 +64,13 @@ function presetFields(preset) {
 
 export const applyPreset = (preset) => () => presetFields(preset);
 
+// Opens a shared link: its preset's band and tempo, playing the linked tune.
+export const applyLink = ({ preset, key, seed }) => () => ({
+  ...presetFields(preset),
+  key: { ...key },
+  tune: generateTune({ seed, style: preset.style, key }),
+});
+
 export const withNewTune = () => (state) => {
   const key = nextKey(state.tune.key);
   return { key, tune: makeTune(state.style, key) };

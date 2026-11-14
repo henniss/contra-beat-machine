@@ -7,11 +7,13 @@ import { findPreset } from './presets.js';
 import { AudioEngine } from './audio/engine.js';
 import { Scheduler } from './audio/scheduler.js';
 import {
-  createStore, initialState, applyPreset, withNewTune, nextMedleyTune, setBpm, setChannel,
+  createStore, initialState, applyPreset, applyLink, withNewTune, nextMedleyTune, setBpm, setChannel,
 } from './state.js';
+import { tuneToHash, parseHash } from './link.js';
 import { initUI } from './ui.js';
 
-const store = createStore(initialState());
+const startLink = parseHash(location.hash);
+const store = createStore({ ...initialState(), ...(startLink ? applyLink(startLink)() : {}) });
 const engine = new AudioEngine(INSTRUMENTS);
 const unavailable = new Set();
 let scheduler = null;
@@ -68,6 +70,10 @@ const actions = {
     store.update(withNewTune());
     scheduler?.load(bundle(store.get().tune));
   },
+  openLink(link) {
+    store.update(applyLink(link));
+    scheduler?.load(bundle(store.get().tune));
+  },
   selectPreset(id) {
     const preset = findPreset(id);
     if (!preset) return;
@@ -105,3 +111,19 @@ const ui = initUI({
 
 syncAudio(store.get(), null);
 store.subscribe(syncAudio);
+
+// Keep the address bar pointing at the tune that's playing. replaceState
+// doesn't add history entries, so Back still leaves the page.
+function syncAddress(state, prev) {
+  if (prev && state.tune === prev.tune && state.presetId === prev.presetId) return;
+  const hash = tuneToHash(state);
+  if (location.hash !== hash) history.replaceState(null, '', hash);
+}
+syncAddress(store.get(), null);
+store.subscribe(syncAddress);
+
+// A link pasted into the address bar of an open tab.
+window.addEventListener('hashchange', () => {
+  const link = parseHash(location.hash);
+  if (link) actions.openLink(link);
+});

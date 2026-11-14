@@ -22,10 +22,10 @@ export const INSTRUMENTS = [
   def('guitar', 'Guitar', 'rhythm', createGuitarVoice, 2, 0.15),
   def('banjo', 'Banjo', 'rhythm', createBanjoVoice, 2.5, 0.1),
   def('bass', 'Upright bass', 'bass', createBassVoice, 1.25, 0.05),
-  def('bodhran', 'Bodhrán', 'percussion', createBodhranVoice, 0.6, 0.1),
-  def('feet', 'Feet', 'percussion', createFeetVoice, 0.75, 0.05),
-  def('metronome', 'Metronome', 'count', createMetronomeVoice, 0.8, 0),
-  def('instructor', 'Instructor', 'count', createInstructorVoice, 1, 0),
+  def('bodhran', 'Bodhrán', 'percussion', createBodhranVoice, 2, 0.1),
+  def('feet', 'Feet', 'percussion', createFeetVoice, 2.5, 0.05),
+  def('metronome', 'Metronome', 'count', createMetronomeVoice, 3, 0),
+  def('instructor', 'Instructor', 'count', createInstructorVoice, 3, 0),
 ];
 
 export const INSTRUMENT_IDS = INSTRUMENTS.map((i) => i.id);
