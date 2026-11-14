@@ -1,11 +1,15 @@
 # Hosting on AWS
 
-The site is plain static files (about 160 KB), so hosting is simple:
+The site is plain static files (about 160 KB), served at
+**https://enniss.net/contra/**. The setup is written as Terraform, in
+`infra/`:
 
-- an **S3 bucket** holds the files,
-- **CloudFront** serves them over HTTPS on your own domain,
+- an **S3 bucket** holds the files, under `contra/`,
+- **CloudFront** serves them over HTTPS on enniss.net,
 - a free **certificate** from AWS Certificate Manager covers HTTPS,
-- a **DNS record** points the domain at CloudFront.
+- a **budget** emails harris@enniss.net if spending passes $5 a month.
+
+DNS stays at Namecheap, so two records are added there by hand.
 
 ## Why CloudFront, for a site only a couple of people use
 
@@ -20,87 +24,141 @@ The site is plain static files (about 160 KB), so hosting is simple:
   pay-per-use pricing, though, CloudFront doesn't cap anything by itself. AWS
   added flat-rate CloudFront plans in late 2025, including a **free plan**
   with built-in rate limiting and no overage charges. That makes the bill a
-  fixed $0. Check the current terms when you set it up.
-- Whatever you choose, set a **budget alert** (step 7).
+  fixed $0. Terraform can't subscribe to it yet, so that's one click in the
+  console (step 7).
+- The budget alert covers anything else.
 
-Alternatives, if AWS isn't a requirement: GitHub Pages, Cloudflare Pages and
-Netlify all host static sites for free with HTTPS and a custom domain, and
-can't bill you for traffic.
+**Recommendation:** S3 + CloudFront on the free flat-rate plan, set up with
+the Terraform in `infra/`, plus the budget alert.
 
-**Recommendation:** S3 + CloudFront on the free flat-rate plan, plus a budget
-alert.
+## What enniss.net has today
 
-## Checklist
+Looked up from public DNS before setting this up:
 
-### 1. Bucket
-- [ ] Create an S3 bucket (any name, e.g. `contra-beat-machine-site`), in any
-      region.
-- [ ] Leave **Block all public access** on. Don't turn on "static website
-      hosting". Only CloudFront will read the bucket.
+| Record | Value | Meaning |
+|---|---|---|
+| NS | `dns1/dns2.registrar-servers.com` | DNS is hosted at Namecheap |
+| MX | `in1/in2-smtp.messagingengine.com` | Email goes to Fastmail |
+| TXT | `v=spf1 include:spf.messagingengine.com ?all` | Fastmail's sender check |
+| A, AAAA | none | No website on the bare domain |
+| CAA | none | Amazon may issue the certificate |
+| `www` | none | Nothing there either |
 
-### 2. Upload only the site files
-- [ ] Upload `index.html`, `css/`, `js/` and `assets/`. Leave out `test/`,
-      `scripts/`, the Markdown files and `package.json`:
-  ```sh
-  aws s3 sync . s3://YOUR-BUCKET --delete \
-    --exclude "*" --include "index.html" --include "css/*" --include "js/*" --include "assets/*"
-  ```
-- [ ] Check that the `.js` files are stored with type `text/javascript`.
-      Browsers refuse to load the app's scripts otherwise. `aws s3 sync` sets
-      types from file extensions, so this is normally fine. Drag-and-drop in
-      the console sometimes gets it wrong.
+The site takes nothing away. Email records are separate from web records and
+stay as they are.
 
-### 3. Certificate
-- [ ] In AWS Certificate Manager, switch to the **us-east-1** region
-      (CloudFront only accepts certificates from there).
-- [ ] Request a public certificate for `yourdomain.com` and/or
-      `www.yourdomain.com`.
-- [ ] Add the DNS record it shows you to prove you own the domain, and wait
-      for "Issued".
+## How the folder works
 
-### 4. CloudFront
-- [ ] Create a distribution with the bucket as its origin.
-- [ ] For origin access, choose **Origin access control**, then apply the
-      bucket policy it offers to add for you.
-- [ ] Set viewer protocol to **Redirect HTTP to HTTPS**.
-- [ ] Set **Default root object** to `index.html`.
-- [ ] Under alternate domain names, add your domain(s) and pick the
-      certificate from step 3.
-- [ ] Use the default caching policy. Choose the free flat-rate plan if it's
-      offered; otherwise pick the cheapest price class.
+The files sit under `contra/` in the bucket, and CloudFront passes each
+address straight to the object of the same name. Two extra objects cover the
+awkward addresses:
 
-### 5. DNS
-- [ ] **Domain in Route 53:** create an **A record (Alias)** pointing to the
-      distribution.
-- [ ] **Domain elsewhere:** create a CNAME from `www` to the
-      `dxxxx.cloudfront.net` address. Most registrars don't allow a CNAME on
-      the bare domain, so either use `www` or move the domain's DNS to
-      Route 53.
+- **`contra/`**: a second copy of `index.html`, so `enniss.net/contra/`
+  serves the page. The S3 console shows this key as a folder; don't delete
+  it there. Terraform would put it back on the next apply.
+- **`contra`**: a tiny page that forwards `enniss.net/contra` (no slash) to
+  `enniss.net/contra/`, keeping any tune link after the `#`.
 
-### 6. Check it
-- [ ] Open `https://yourdomain.com` and press Play.
-- [ ] Turn on the instructor. If the voice counts, the audio files are being
-      served correctly.
-- [ ] Open a tune link (e.g. `https://yourdomain.com/#last-waltz/D-major/abc12`)
-      and check that it plays that tune. The part after `#` never reaches the
-      server, so no extra setup is needed for links.
-- [ ] Check the browser console for errors.
+The app only uses relative paths, which is what lets it live in a folder.
+`test/paths.test.js` checks this.
 
-### 7. Budget alert
-- [ ] In AWS Budgets, create a monthly cost budget (e.g. $5) that emails you
-      when spending goes over it.
+The bare domain, `enniss.net/`, shows `infra/root/index.html`: a one-line
+page linking to the beat machine. It's stored as `index.html` at the top of
+the bucket, and the distribution's default root object points at it. Any
+other address gets S3's "Access Denied" error.
+
+To host something else on enniss.net, give it its own folder in the bucket
+(with a `folder/` copy of its `index.html`, as for `contra/`) and add a link
+to the root page. Terraform only manages the files it uploads itself, so it
+won't touch other folders.
+
+## First-time setup
+
+1. [ ] **Install** Terraform and the AWS CLI:
+       `brew install terraform awscli`.
+2. [ ] **Credentials:** set them up however you like (`aws configure`,
+       `AWS_PROFILE`, SSO). Check the right account is active with
+       `aws sts get-caller-identity`.
+3. [ ] **Initialise:** in `infra/`, run `terraform init`.
+4. [ ] **Certificate first:**
+       `terraform apply -target=aws_acm_certificate.site`
+
+       This prints `certificate_validation_record`. In Namecheap, go to Domain
+       List, then enniss.net, then Advanced DNS, and add a **CNAME Record**:
+   - **Host:** the printed `host`. It's already shortened: Namecheap adds
+     `.enniss.net` itself. Pasting the full name would make a record ending
+     in `enniss.net.enniss.net`, and the certificate would never be issued.
+   - **Value:** the printed `value`.
+
+       Leave the record there for good. AWS uses it to renew the certificate
+       automatically.
+5. [ ] **Everything else:** `terraform plan`, then `terraform apply`. It
+       waits until the certificate is issued, then creates the distribution
+       (a few minutes) and uploads the files.
+6. [ ] **Point the domain:** on the same Namecheap page, add an **ALIAS
+       Record**:
+   - **Host:** `@`
+   - **Value:** the printed `cloudfront_domain`
+   - **TTL:** automatic
+
+       Leave the MX and TXT records for Fastmail alone.
+7. [ ] **Free plan:** in the CloudFront console, open the distribution (its
+       ID is the printed `distribution_id`) and choose the free flat-rate
+       plan. The plan adds its own firewall rules to the distribution;
+       Terraform is set to leave them alone. If a later `terraform plan`
+       wants to change some other setting back, it's the plan's doing: add
+       that setting to `ignore_changes` in `infra/cloudfront.tf`.
+
+       Flat-rate plans aren't available on AWS's credit-based Free Tier
+       accounts (the newer kind, from mid-2025). Upgrading the account to
+       paid fixes that.
+8. [ ] **Check it:**
+   - Open `https://enniss.net/contra/` and press Play.
+   - Turn on the instructor. If the voice counts, the audio files are
+     served correctly.
+   - Open `https://enniss.net/contra/#last-waltz/D-major/abc12` and check
+     it plays that tune. The part after `#` never reaches the server.
+   - Open `https://enniss.net/contra` (no slash): it should move to
+     `/contra/` and play.
+   - Open `https://enniss.net/contra#reel/D-major/abc12`: it should keep
+     the tune.
+   - Check the browser console for errors.
+   - Check email to harris@enniss.net still arrives.
 
 ## Each time you update the site
 
-- [ ] Run the same `aws s3 sync` command from step 2.
-- [ ] Clear CloudFront's cache, or visitors may see the old version for up to
-      a day:
-  ```sh
-  aws cloudfront create-invalidation --distribution-id EXXXX --paths "/*"
-  ```
+- [ ] In `infra/`, run `terraform apply`. It uploads only the files that
+      changed.
+
+The free plan only allows AWS's managed cache policies, so CloudFront keeps
+files for a day. To make up for that, whenever an apply changes any file it
+also clears CloudFront's whole cache (`infra/invalidate.tf`). Visitors get the
+new version within a few minutes. This runs the AWS CLI with the same
+credentials as Terraform, so the CLI must be installed and see the same
+profile. Clearing everything counts as one of the 1,000 free paths a month.
+
+To clear the cache by hand:
+
+```sh
+aws cloudfront create-invalidation --distribution-id <distribution_id> --paths "/*"
+```
+
+A new kind of file (say `.svg`) makes `terraform plan` stop with an error
+until its content type is added to the table in `infra/site.tf`. That's
+deliberate: a wrong type on `.js` stops the app loading.
+
+## Terraform state
+
+Terraform records what it created in `infra/terraform.tfstate`, which git
+ignores. Keep a copy somewhere safe. If it's lost, Terraform forgets the
+bucket and distribution, and they'd have to be imported back.
+
+## Taking it down
+
+Run `terraform destroy` in `infra/`, then delete the two records (the CNAME
+and the ALIAS) at Namecheap.
 
 ## Expected cost
 
-For a hobby site, expect pennies to a dollar or so a month on pay-per-use
-pricing, or $0 on the free flat-rate plan. The certificate is free. Route 53
-adds $0.50 a month if you use it for DNS.
+$0 on the free flat-rate plan; pennies a month on pay-per-use pricing. The
+certificate is free, and so are the first two budgets.

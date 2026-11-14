@@ -4,8 +4,8 @@ This guide is for someone taking over the Contra Beat Machine. It explains how
 the code is organised, how sound gets from a random number to your speakers,
 and how to make the common kinds of change safely. For what the music does and
 why, see `MUSIC.md`. `original-plan.md` is the original design document and
-build log; `plan.md` is the most recent review and clean-up plan. Both are
-useful history, but this guide describes the code as it is now.
+build log, `review-plan.md` the review and clean-up plan, and `plan.md` the
+most recent plan (hosting with Terraform). All are useful history, but this guide describes the code as it is now.
 
 ## 1. At a glance
 
@@ -28,7 +28,13 @@ npm test        # node --test test/
 You need a server, not a double-clicked file: browsers won't load JavaScript
 modules from `file://` URLs. Any static server works.
 
-Hosting is covered in `aws.md`.
+Hosting is covered in `aws.md`; the Terraform that sets it up is in
+`infra/`.
+
+The site is served from a folder, `https://enniss.net/contra/`, so every path
+in the app must stay relative. `css/style.css` works there; `/css/style.css`
+works on a local server and breaks once deployed. `test/paths.test.js` fails
+on any root path in `index.html`, the CSS or the modules.
 
 ## 2. Map of the files
 
@@ -61,8 +67,10 @@ assets/voice/              "one".."four" clips, .ogg and .m4a
 scripts/make-voice.sh      regenerates the clips (espeak-ng + ffmpeg)
 scripts/golden.js          the tunes pinned down by the golden test
 scripts/record-golden.js   rewrites the golden fixture (only after deliberate music changes)
-test/                      node:test suites for music, scheduler, state, presets, and links
+test/                      node:test suites for music, scheduler, state, presets, links, and relative paths
 test/fixtures/tunes.json   recorded output of the generator for fixed seeds
+infra/                     Terraform for hosting (S3, CloudFront, certificate, budget, root page); see aws.md
+.gitignore                 Terraform's working files and state, .DS_Store
 ```
 
 The most useful split to keep in mind is **`js/music/` (pure, deterministic,
@@ -469,7 +477,9 @@ each click, each spoken number and each lamp should coincide.
   trying. Each cached note is a few hundred kilobytes at most, and only the
   pitches a tune uses are rendered.
 - **JavaScript MIME type:** hosts must serve `.js` as `text/javascript`, or
-  browsers refuse to load modules. `aws.md` covers this for S3.
+  browsers refuse to load modules. On S3, Terraform sets each file's type
+  from a table in `infra/site.tf`, and a file with an extension not in the
+  table stops `terraform plan` rather than uploading with a wrong type.
 
 ## 8. Style conventions
 

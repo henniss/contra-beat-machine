@@ -59,13 +59,15 @@ starts its vowel begins. Copy those numbers into the offsets table in
 | `js/music/` | Tune generation: random numbers, styles, scales and chords, chord progressions, melodies, and each instrument's accompaniment pattern |
 | `js/audio/` | The audio engine (mixing and reverb), the beat scheduler, and one synthesized voice per instrument |
 | `js/` | Instruments, presets, app state, the user interface, and the entry point |
-| `test/` | Tests for the music logic, the scheduler, presets, and links |
+| `test/` | Tests for the music logic, the scheduler, presets, links, and relative paths |
+| `infra/` | Terraform for hosting on AWS (see `aws.md`) |
 
 `MUSIC.md` explains the musical choices and why they were made, for readers
 with no musical background. `CODE.md` is a guide for maintainers: how the code
 fits together and how to make common changes. `original-plan.md` is the
-original design document and build log; `plan.md` is the most recent review
-and clean-up plan.
+original design document and build log, `review-plan.md` the review and
+clean-up plan, and `plan.md` the most recent plan (hosting with Terraform).
+Hosting is described in `aws.md`, and the Terraform for it is in `infra/`.
 
 ## A short guide to contra music
 

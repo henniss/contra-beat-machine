@@ -1,0 +1,47 @@
+# Run on every commit; `pre-commit run --all-files` checks the whole repo.
+repos:
+  # Secrets: anything that looks like a key, token or password.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: detect-private-key
+      - id: detect-aws-credentials
+        args: [--allow-missing-credentials]
+      - id: check-added-large-files
+        args: [--maxkb=1024] # the golden fixture is ~480 KB
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-json
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: forbid-new-submodules
+      - id: check-symlinks
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.109.5
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate
+
+  - repo: local
+    hooks:
+      - id: no-terraform-state
+        name: no Terraform state or plan files
+        entry: Terraform state and plan files must not be committed
+        language: fail
+        files: '(\.tfstate(\.backup)?|\.tfplan)$'
+      - id: npm-test
+        name: npm test
+        entry: npm test
+        language: system
+        pass_filenames: false
+        files: '\.(js|json|html|css)$'
