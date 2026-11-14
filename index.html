@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contra Beat Machine</title>
+  <meta name="description" content="Synthesized backing music for contra dancing: reels, jigs, and waltzes.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="title-bar">
+    <h1>Contra Beat Machine</h1>
+    <p class="tagline">Endless fiddle tunes for dancing, practice, and calling.</p>
+  </header>
+
+  <main>
+    <section class="transport" aria-label="Playback controls">
+      <button id="play" class="play-button" type="button" aria-pressed="false">
+        <span class="play-icon" aria-hidden="true"></span>
+        <span class="play-label">Play</span>
+      </button>
+      <button id="new-tune" class="secondary-button" type="button">New tune</button>
+
+      <div class="control bpm-control">
+        <label for="bpm">Tempo <output id="bpm-value" for="bpm">116</output> BPM</label>
+        <div class="bpm-track">
+          <div id="bpm-band" class="bpm-band" aria-hidden="true"></div>
+          <input id="bpm" type="range" min="70" max="140" step="1" value="116">
+        </div>
+        <span id="bpm-band-label" class="hint">typical: 110–122</span>
+      </div>
+
+      <div class="control">
+        <label for="master">Master volume</label>
+        <input id="master" type="range" min="0" max="100" step="1" value="80">
+      </div>
+
+      <label class="checkbox">
+        <input id="medley" type="checkbox" checked>
+        <span>Medley <span class="hint">(new tune every few times through)</span></span>
+      </label>
+    </section>
+
+    <section class="beat-display" aria-label="Beat display">
+      <div id="lamps" class="lamps" role="group" aria-label="Beat lights">
+        <span class="lamp lamp-first" role="img" aria-label="Beat 1"></span>
+        <span class="lamp" role="img" aria-label="Beat 2"></span>
+        <span class="lamp" role="img" aria-label="Beat 3"></span>
+        <span class="lamp" role="img" aria-label="Beat 4"></span>
+      </div>
+      <div class="phrase" aria-label="Position in the tune">
+        <ol id="parts" class="parts">
+          <li>A1</li><li>A2</li><li>B1</li><li>B2</li>
+        </ol>
+        <span id="position" class="position">beat – / 64</span>
+      </div>
+      <p id="tune-info" class="tune-info"></p>
+    </section>
+
+    <section aria-labelledby="presets-heading">
+      <h2 id="presets-heading">Presets</h2>
+      <div id="presets" class="presets"></div>
+    </section>
+
+    <section aria-labelledby="instruments-heading">
+      <h2 id="instruments-heading">Instruments</h2>
+      <div id="instruments" class="instruments"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Every tune is generated on the spot. Space bar plays and stops.</p>
+  </footer>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
