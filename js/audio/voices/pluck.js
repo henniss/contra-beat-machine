@@ -2,9 +2,11 @@
 // a burst of noise circulates in a short delay line and is gently smoothed on
 // every pass, which sounds like a string ringing out. Each pitch is rendered
 // once into a buffer and cached, so playing a note just replays the buffer.
+// prepare() renders a tune's pitches before they're needed, keeping that work
+// out of the scheduler's timer; play() still renders on demand as a fallback.
 
 import { midiToFreq } from '../../music/theory.js';
-import { releaseWhenDone } from './prerender.js';
+import { releaseWhenDone, longestByPitch } from './prerender.js';
 
 export const PLUCK_CONFIGS = {
   guitar: {
@@ -96,6 +98,10 @@ export function createPluckVoice(ctx, output, config) {
   }
 
   return {
+    prepare(events) {
+      for (const midi of longestByPitch(events).keys()) getBuffer(ctx, config, midi);
+    },
+
     play(ev, when, secondsPerTick) {
       const dur = Math.max(0.03, ev.durationTicks * secondsPerTick);
       if (!Array.isArray(ev.midi)) {

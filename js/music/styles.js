@@ -41,7 +41,6 @@ export const STYLES = {
 
 // Parts are played A, A, B, B.
 export const PART_ORDER = ['A', 'A', 'B', 'B'];
-export const PART_LABELS = ['A1', 'A2', 'B1', 'B2'];
 
 export function styleSpec(style) {
   const spec = STYLES[style];

@@ -11,21 +11,21 @@ import { createGuitarVoice, createBanjoVoice, createBassVoice } from './audio/vo
 import { createBodhranVoice, createFeetVoice, createMetronomeVoice } from './audio/voices/percussion.js';
 import { createInstructorVoice } from './audio/voices/instructor.js';
 
-const def = (id, name, role, createVoice, trim, reverb) => ({
-  id, name, role, icon: ICONS[id], createVoice, pattern: PATTERNS[id], trim, reverb,
+const def = (id, name, createVoice, trim, reverb) => ({
+  id, name, icon: ICONS[id], createVoice, pattern: PATTERNS[id], trim, reverb,
 });
 
 export const INSTRUMENTS = [
-  def('fiddle', 'Fiddle', 'melody', createFiddleVoice, 1, 0.3),
-  def('flute', 'Flute', 'melody', createFluteVoice, 0.9, 0.3),
-  def('piano', 'Piano', 'rhythm', createPianoVoice, 1, 0.2),
-  def('guitar', 'Guitar', 'rhythm', createGuitarVoice, 2, 0.15),
-  def('banjo', 'Banjo', 'rhythm', createBanjoVoice, 2.5, 0.1),
-  def('bass', 'Upright bass', 'bass', createBassVoice, 1.25, 0.05),
-  def('bodhran', 'Bodhrán', 'percussion', createBodhranVoice, 2, 0.1),
-  def('feet', 'Feet', 'percussion', createFeetVoice, 2.5, 0.05),
-  def('metronome', 'Metronome', 'count', createMetronomeVoice, 3, 0),
-  def('instructor', 'Instructor', 'count', createInstructorVoice, 3, 0),
+  def('fiddle', 'Fiddle', createFiddleVoice, 1, 0.3),
+  def('flute', 'Flute', createFluteVoice, 0.9, 0.3),
+  def('piano', 'Piano', createPianoVoice, 1, 0.2),
+  def('guitar', 'Guitar', createGuitarVoice, 2, 0.15),
+  def('banjo', 'Banjo', createBanjoVoice, 2.5, 0.1),
+  def('bass', 'Upright bass', createBassVoice, 1.25, 0.05),
+  def('bodhran', 'Bodhrán', createBodhranVoice, 2, 0.1),
+  def('feet', 'Feet', createFeetVoice, 2.5, 0.05),
+  def('metronome', 'Metronome', createMetronomeVoice, 3, 0),
+  def('instructor', 'Instructor', createInstructorVoice, 3, 0),
 ];
 
 export const INSTRUMENT_IDS = INSTRUMENTS.map((i) => i.id);

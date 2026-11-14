@@ -35,7 +35,6 @@ async function loadClip(ctx, word) {
 export function createInstructorVoice(ctx, output) {
   const buffers = {};
   const voice = {
-    status: 'loading',
     ready: null,
     play(ev, when, secondsPerTick) {
       const word = WORDS[ev.word - 1];
@@ -74,8 +73,8 @@ export function createInstructorVoice(ctx, output) {
   voice.ready = Promise.all(WORDS.map(async (word) => {
     buffers[word] = await loadClip(ctx, word);
   })).then(
-    () => { voice.status = 'ready'; return true; },
-    (err) => { voice.status = 'unavailable'; console.warn('Instructor clips unavailable:', err); return false; },
+    () => true,
+    (err) => { console.warn('Instructor clips unavailable:', err); return false; },
   );
 
   return voice;

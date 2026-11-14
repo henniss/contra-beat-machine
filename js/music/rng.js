@@ -14,9 +14,6 @@ export function createRng(seed) {
 
   return {
     next,
-    int(min, max) {
-      return min + Math.floor(next() * (max - min + 1));
-    },
     pick(items) {
       return items[Math.floor(next() * items.length)];
     },

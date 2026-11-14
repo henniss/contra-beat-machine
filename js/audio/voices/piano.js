@@ -6,9 +6,8 @@
 // ring is pre-rendered once and replayed; the damper (the key being released)
 // is applied live. See prerender.js.
 import { midiToFreq } from '../../music/theory.js';
-import { noiseBuffer } from './percussion.js';
 import {
-  createRenderCache, playBuffer, releaseWhenDone, longestByPitch, TEMPO_MARGIN,
+  createRenderCache, playBuffer, releaseWhenDone, longestByPitch, TEMPO_MARGIN, noiseBuffer,
 } from './prerender.js';
 
 const PARTIALS = 6;

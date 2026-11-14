@@ -12,8 +12,7 @@ import {
 import { tuneToHash, parseHash } from './link.js';
 import { initUI } from './ui.js';
 
-const startLink = parseHash(location.hash);
-const store = createStore({ ...initialState(), ...(startLink ? applyLink(startLink)() : {}) });
+const store = createStore(initialState(parseHash(location.hash)));
 const engine = new AudioEngine(INSTRUMENTS);
 const unavailable = new Set();
 let scheduler = null;
@@ -35,24 +34,32 @@ function syncAudio(state, prev) {
   }
 }
 
-async function ensureAudio() {
-  if (scheduler) return;
-  await engine.start();
-  scheduler = new Scheduler(engine, {
-    onTuneStart: (tune) => {
-      if (store.get().tune !== tune) store.update({ tune, key: tune.key });
-    },
-    nextMedley: (tune) => bundle(nextMedleyTune(tune)),
-  });
-  syncAudio(store.get(), null);
-  scheduler.load(bundle(store.get().tune));
+// Shared by every caller, so a second Play during start-up waits for the same
+// start-up instead of building a second scheduler that nothing could stop.
+let audioReady = null;
+function ensureAudio() {
+  audioReady ??= (async () => {
+    await engine.start();
+    scheduler = new Scheduler(engine, {
+      onTuneStart: (tune) => {
+        if (store.get().tune !== tune) store.update({ tune });
+      },
+      nextMedley: (tune) => bundle(nextMedleyTune(tune)),
+    });
+    syncAudio(store.get(), null);
+    scheduler.load(bundle(store.get().tune));
 
-  engine.voices.instructor?.ready?.then((ok) => {
-    if (ok) return;
-    unavailable.add('instructor');
-    scheduler.setEnabled('instructor', false);
-    ui.markUnavailable('instructor', "The counting voice couldn't load.");
+    engine.voices.instructor?.ready?.then((ok) => {
+      if (ok) return;
+      unavailable.add('instructor');
+      scheduler.setEnabled('instructor', false);
+      ui.markUnavailable('instructor', "The counting voice couldn't load.");
+    });
+  })().catch((err) => {
+    audioReady = null; // let the next click try again
+    throw err;
   });
+  return audioReady;
 }
 
 const actions = {
@@ -62,6 +69,9 @@ const actions = {
       scheduler.stop();
       store.update({ playing: false });
     } else {
+      // Browsers can pause the audio system later (iOS after a call or the
+      // lock screen); a Play click is allowed to wake it again.
+      await engine.start();
       scheduler.start();
       store.update({ playing: true });
     }

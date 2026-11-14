@@ -5,6 +5,7 @@
 import { generateTune } from './music/tune.js';
 import { randomSeed, createRng } from './music/rng.js';
 import { DEFAULT_PRESET } from './presets.js';
+import { KEY_FAMILIES } from './music/theory.js';
 
 export function createStore(initial) {
   let state = initial;
@@ -28,33 +29,25 @@ const cloneMixer = (mixer) =>
 
 export const makeTune = (style, key) => generateTune({ seed: randomSeed(), style, key });
 
-// Fiddle-friendly keys for each mode. Bands often change key between tunes,
-// so each new tune moves to a different key of the same kind.
-export const KEY_FAMILIES = {
-  major: ['D', 'G', 'A'],
-  dorian: ['E', 'A', 'D'],
-  minor: ['E', 'A', 'B'],
-};
-
 export function nextKey(key, rng = createRng(randomSeed())) {
   const others = KEY_FAMILIES[key.mode].filter((tonic) => tonic !== key.tonic);
   return { tonic: rng.pick(others), mode: key.mode };
 }
 
-export function initialState(preset = DEFAULT_PRESET) {
+// The tune carries its own style and key; the state doesn't keep copies.
+// `link` (from parseHash) opens a shared tune instead of the default preset.
+export function initialState(link = null) {
   return {
     playing: false,
     masterVolume: 0.8,
     medley: false,
-    ...presetFields(preset),
+    ...(link ? applyLink(link)() : presetFields(DEFAULT_PRESET)),
   };
 }
 
 function presetFields(preset) {
   return {
     presetId: preset.id,
-    style: preset.style,
-    key: { ...preset.key },
     bpm: preset.bpm,
     swing: preset.swing,
     mixer: cloneMixer(preset.mixer),
@@ -64,17 +57,14 @@ function presetFields(preset) {
 
 export const applyPreset = (preset) => () => presetFields(preset);
 
-// Opens a shared link: its preset's band and tempo, playing the linked tune.
+// Opens a shared link: its preset's band and tempo, playing the linked tune,
+// or a fresh one when the link leaves out the key or tune number.
 export const applyLink = ({ preset, key, seed }) => () => ({
   ...presetFields(preset),
-  key: { ...key },
-  tune: generateTune({ seed, style: preset.style, key }),
+  tune: generateTune({ seed: seed ?? randomSeed(), style: preset.style, key: key ?? preset.key }),
 });
 
-export const withNewTune = () => (state) => {
-  const key = nextKey(state.tune.key);
-  return { key, tune: makeTune(state.style, key) };
-};
+export const withNewTune = () => ({ tune }) => ({ tune: makeTune(tune.style, nextKey(tune.key)) });
 
 // A medley continues in the same style, moving to a new key.
 export const nextMedleyTune = (tune) => makeTune(tune.style, nextKey(tune.key));

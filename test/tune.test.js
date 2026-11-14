@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateTune, MELODY_RANGE } from '../js/music/tune.js';
 import { STYLES, barTicks } from '../js/music/styles.js';
-import { isChordTone, pitchClass } from '../js/music/theory.js';
+import { isChordTone, pitchClass, chordAt } from '../js/music/theory.js';
 import { createRng } from '../js/music/rng.js';
 import { templatesFor, parseTemplate } from '../js/music/progressions.js';
 
@@ -25,10 +25,6 @@ function* allTunes() {
       for (const seed of SEEDS) yield generateTune({ seed, style, key });
     }
   }
-}
-
-function chordAt(bar, tick) {
-  return bar.chords.length === 1 ? bar.chords[0] : bar.chords[Math.floor(tick / 12)];
 }
 
 const isStrong = (style, tick) => (style === 'reel' ? tick % 6 === 0 : tick % 12 === 0);
@@ -70,7 +66,7 @@ test('strong positions are chord tones', () => {
         for (const note of bar.melody) {
           if (note.articulation === 'roll' || !isStrong(tune.style, note.tick)) continue;
           assert.ok(
-            isChordTone(note.midi, tune.key, chordAt(bar, note.tick)),
+            isChordTone(note.midi, tune.key, chordAt(bar.chords, note.tick)),
             `${tune.style} ${part} bar ${i + 1} tick ${note.tick}: ${note.midi} is not a chord tone`,
           );
         }

@@ -12,6 +12,20 @@
 // so nothing is ever silent. Every live node is disconnected as soon as its
 // sound ends, so finished notes leave the audio graph straight away.
 
+// One second of white noise per audio context, shared by every voice that
+// needs breath, hammer or drum noise. Offline render contexts get their own.
+const noiseCache = new WeakMap();
+
+export function noiseBuffer(ctx) {
+  if (!noiseCache.has(ctx)) {
+    const buffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    noiseCache.set(ctx, buffer);
+  }
+  return noiseCache.get(ctx);
+}
+
 // Disconnect `source` and the nodes it feeds once it has finished playing.
 export function releaseWhenDone(source, ...nodes) {
   source.onended = () => {
@@ -79,3 +93,50 @@ export function longestByPitch(events) {
 // Buffers are rendered this much longer than the current tempo needs, so
 // slowing down a little doesn't send notes back to live synthesis.
 export const TEMPO_MARGIN = 1.3;
+
+// A voice for held notes (fiddle, flute): each pitch's attack and endless
+// sustain is pre-rendered at velocity 1, and the note's level, length and
+// release are applied live by the replaying gain. What differs per instrument:
+//   renderNote(c, out, midi, seconds)  the pre-render recipe
+//   playLive(ev, when, dur)            the full live note, used for notes
+//                                      shorter than `shortest` (they need a
+//                                      faster attack) and until a buffer is ready
+export function createHeldNoteVoice(ctx, input, { level, release, shortest, renderNote, playLive }) {
+  const cache = createRenderCache(ctx);
+  const lengthFor = (dur) => dur + release + 0.02;
+
+  function request(midi, dur) {
+    const seconds = lengthFor(dur) * TEMPO_MARGIN;
+    cache.request(midi, seconds, (c, out) => renderNote(c, out, midi, seconds));
+  }
+
+  return {
+    prepare(events, secondsPerTick) {
+      for (const [midi, ticks] of longestByPitch(events)) {
+        const dur = ticks * secondsPerTick;
+        if (dur >= shortest) request(midi, dur);
+      }
+    },
+
+    play(ev, when, secondsPerTick) {
+      const dur = Math.max(0.03, ev.durationTicks * secondsPerTick);
+      if (dur < shortest) {
+        playLive(ev, when, dur);
+        return;
+      }
+      const buffer = cache.get(ev.midi, lengthFor(dur));
+      if (!buffer) {
+        request(ev.midi, dur);
+        playLive(ev, when, dur);
+        return;
+      }
+      const peak = level * ev.velocity;
+      const end = when + dur + release;
+      playBuffer(ctx, input, buffer, when, end + 0.02, (gain) => {
+        gain.setValueAtTime(peak, when);
+        gain.setValueAtTime(peak, when + dur);
+        gain.linearRampToValueAtTime(0, end);
+      });
+    },
+  };
+}

@@ -9,8 +9,9 @@ part of the tune you're in (A1, A2, B1, B2).
 The address bar always holds a link to the tune that's playing, for example
 `/#old-time-breakdown/A-major/1x2k9f`: the preset (or just the style, once
 you've changed the band), the key, and the tune number. Open that link later
-to hear the same tune again. Without the part after `#`, the page starts a
-fresh random tune.
+to hear the same tune again. A shorter link such as `/#celtic-jig` or
+`/#celtic-jig/A-dorian` opens that preset with a fresh random tune. Without the
+part after `#`, the page starts the default preset with a fresh random tune.
 
 Everything runs in the browser. There is no server, no build step, and no
 libraries. Every instrument is synthesized live with the Web Audio API. The
@@ -58,12 +59,13 @@ starts its vowel begins. Copy those numbers into the offsets table in
 | `js/music/` | Tune generation: random numbers, styles, scales and chords, chord progressions, melodies, and each instrument's accompaniment pattern |
 | `js/audio/` | The audio engine (mixing and reverb), the beat scheduler, and one synthesized voice per instrument |
 | `js/` | Instruments, presets, app state, the user interface, and the entry point |
-| `test/` | Tests for the music logic |
+| `test/` | Tests for the music logic, the scheduler, presets, and links |
 
 `MUSIC.md` explains the musical choices and why they were made, for readers
 with no musical background. `CODE.md` is a guide for maintainers: how the code
-fits together and how to make common changes. `plan.md` is the original design
-document and build log.
+fits together and how to make common changes. `original-plan.md` is the
+original design document and build log; `plan.md` is the most recent review
+and clean-up plan.
 
 ## A short guide to contra music
 

@@ -3,8 +3,9 @@
 This guide is for someone taking over the Contra Beat Machine. It explains how
 the code is organised, how sound gets from a random number to your speakers,
 and how to make the common kinds of change safely. For what the music does and
-why, see `MUSIC.md`. `plan.md` is the original design document and build log.
-It's useful history, but this guide describes the code as it is now.
+why, see `MUSIC.md`. `original-plan.md` is the original design document and
+build log; `plan.md` is the most recent review and clean-up plan. Both are
+useful history, but this guide describes the code as it is now.
 
 ## 1. At a glance
 
@@ -58,7 +59,10 @@ js/
       prerender.js         shared: pre-rendered notes, and prompt node clean-up
 assets/voice/              "one".."four" clips, .ogg and .m4a
 scripts/make-voice.sh      regenerates the clips (espeak-ng + ffmpeg)
-test/                      node:test suites for music, state, and links
+scripts/golden.js          the tunes pinned down by the golden test
+scripts/record-golden.js   rewrites the golden fixture (only after deliberate music changes)
+test/                      node:test suites for music, scheduler, state, presets, and links
+test/fixtures/tunes.json   recorded output of the generator for fixed seeds
 ```
 
 The most useful split to keep in mind is **`js/music/` (pure, deterministic,
@@ -160,6 +164,20 @@ before they're needed. A voice falls back to building the note live until its
 buffer is ready, and for notes too short for the pre-rendered attack (the
 quick notes of a roll). Every live node is disconnected as soon as its sound
 ends (`releaseWhenDone`). If you add a voice, follow the same pattern.
+Held-note instruments can use `createHeldNoteVoice` from `prerender.js`, as
+the fiddle and flute do: give it the pre-render recipe and the live fallback,
+and it handles the cache, the short-note cut-off and the release.
+
+**App state** (in `state.js`):
+
+```js
+{
+  playing, masterVolume, medley,
+  presetId,        // a preset id, or 'custom' once tempo or instruments change
+  bpm, swing, mixer,
+  tune,            // the only copy of the current style and key
+}
+```
 
 ### 3.3 Generating the melody (`tune.js`)
 
@@ -224,6 +242,11 @@ two clocks"):
   mid-bar.
 - **Medley:** after `medleyRepeats - 1` loops the next tune is generated in
   advance (`prepared`), and installed at the loop boundary.
+- **Stalls are skipped, not replayed.** If the timer didn't run for a while
+  (laptop asleep, tab frozen), ticks more than 50 ms overdue are passed over
+  silently: whole loops at once, then single ticks. Bar-line switches and
+  medley handovers still happen, so the music resumes in time at the right
+  place instead of playing the backlog in one burst.
 - **Beats for the lamps:** every time it books a beat, it records
   `{ time, lamp, partIndex, … }` in a queue. The UI's animation loop
   (`requestAnimationFrame` in `ui.js`) calls `takeBeats(now)` and lights the
@@ -256,11 +279,11 @@ voice → channel gain (per instrument) → transport → master → compressor 
 | Voice | Technique | Notes |
 |---|---|---|
 | `fiddle.js` | Two detuned sawtooth oscillators through fixed peaking filters (violin body resonances), with vibrato that fades in on long notes | Each pitch's attack and sustain is pre-rendered; length and release are applied live. Body filters are shared. Pre-rendered notes use one fixed brightness (live ones vary it slightly with velocity). |
-| `flute.js` | Sine plus a little triangle, with a burst of filtered noise for breath | Pre-rendered like the fiddle. Uses the shared noise buffer from `percussion.js` |
+| `flute.js` | Sine plus a little triangle, with a burst of filtered noise for breath | Pre-rendered like the fiddle; both use `createHeldNoteVoice`. |
 | `piano.js` | Six slightly sharp sine partials (stiff-string stretching) with individual decays, plus a noise "hammer" click | Each pitch's free ring is pre-rendered; the damper is applied live. Accepts a chord array. |
-| `pluck.js` | Karplus-Strong plucked string, rendered once per pitch into a cached buffer, then replayed | Guitar, banjo and bass share it with different `PLUCK_CONFIGS`. Arrays become strums, with strings a few milliseconds apart. |
-| `percussion.js` | Falling sine "thumps" plus filtered noise bursts | Bodhrán, feet, metronome. Each stroke is pre-rendered four times (different noise), and the takes rotate. Also exports `noiseBuffer`. |
-| `prerender.js` | Shared helpers: the render cache, buffer playback, node clean-up | See "Keep the number of live audio nodes per note small" above |
+| `pluck.js` | Karplus-Strong plucked string, rendered once per pitch into a cached buffer, then replayed | Guitar, banjo and bass share it with different `PLUCK_CONFIGS`. `prepare` renders a tune's pitches up front; `play` renders on demand only as a fallback. Arrays become strums, with strings a few milliseconds apart. |
+| `percussion.js` | Falling sine "thumps" plus filtered noise bursts | Bodhrán, feet, metronome. Each stroke is pre-rendered four times (different noise), and the takes rotate. |
+| `prerender.js` | Shared helpers: the render cache, buffer playback, node clean-up, the held-note voice, the shared noise buffer | See "Keep the number of live audio nodes per note small" above |
 | `instructor.js` | Decoded audio clips, started early by `CLIP_OFFSETS` so the vowel (not the consonant) lands on the beat | Loads Ogg, falls back to M4A for Safari; `ready` resolves false if loading fails, and the UI greys the card out |
 
 ### 3.8 State and UI
@@ -269,7 +292,10 @@ voice → channel gain (per instrument) → transport → master → compressor 
   "change makers" such as `applyPreset`, `withNewTune`, `setBpm` and
   `setChannel`. Each returns a function `state → partial state`. Any tempo or
   instrument tweak sets `presetId` to `'custom'`.
-- **`main.js`** defines `actions` (what the buttons do), keeps the audio side
+- **`main.js`** defines `actions` (what the buttons do), starts the audio
+  once (every caller shares one start-up promise, so a double click can't
+  build two schedulers), wakes the audio system again on every Play (browsers
+  can pause it, e.g. iOS after a phone call), keeps the audio side
   in step with the store (`syncAudio`), and keeps the address bar in step
   (`syncAddress`).
 - **`ui.js`** builds the preset buttons and instrument cards from data, and a
@@ -280,9 +306,11 @@ voice → channel gain (per instrument) → transport → master → compressor 
 ### 3.9 Tune links (`link.js`)
 
 The address bar always shows `#<preset or style>/<tonic>-<mode>/<seed in base 36>`,
-e.g. `#celtic-jig/A-dorian/abc12`. On load (and on `hashchange`) `parseHash`
-validates it strictly and returns `null` for anything unexpected, in which
-case the page starts a random tune. Links use `history.replaceState`, so they
+e.g. `#celtic-jig/A-dorian/abc12`. The key and tune number are optional:
+`#celtic-jig` or `#celtic-jig/A-dorian` open that preset with a fresh random
+tune, after which the address bar shows the full link. On load (and on
+`hashchange`) `parseHash` validates it strictly and returns `null` for
+anything unexpected, in which case the page starts the default preset. Links use `history.replaceState`, so they
 don't fill up the Back history. The `#` part never reaches the server, so
 links need no hosting configuration.
 
@@ -335,8 +363,8 @@ tests enforce it:
 ### Add a preset
 Add an entry to `PRESETS` in `presets.js`. The id becomes part of tune links,
 so pick a readable one and don't rename it later. The key's tonic must be in
-`KEY_FAMILIES` for its mode (`state.js`), or New tune and links won't handle
-it.
+`KEY_FAMILIES` for its mode (`theory.js`), or New tune and links won't handle
+it. `presets.test.js` checks this.
 
 ### Rebalance an instrument's loudness
 Change its `trim` in `instruments.js`. Trim multiplies the gain, so 2 is about
@@ -358,7 +386,7 @@ those only if you want a preset to start with a different mix.
 4. Register it in `INSTRUMENTS` (`instruments.js`) with a trim and a reverb
    send.
 5. Add its id to `ALL_IDS` in `presets.js` so every preset has a mixer entry
-   for it.
+   for it. (`presets.test.js` fails until you do.)
 6. Check the CSS grid still lays out sensibly (currently 5 columns on desktop,
    2 on narrow screens).
 7. Balance its level against the others by ear, and adjust `trim`.
@@ -380,7 +408,9 @@ missing.
 ### Make melodies sound better
 Turn the knobs in `RULES` at the top of `tune.js`, e.g. lower `leapChance`
 for smoother lines, or reweight `reelBeat` for more or fewer rolls. Listen to
-several tunes per change: one tune proves nothing.
+several tunes per change: one tune proves nothing. Any such change makes the
+golden test fail, because old links now play different tunes. When the change
+is deliberate, run `node scripts/record-golden.js` and commit the new fixture.
 
 ### Regenerate the counting voice
 Install `espeak-ng` and `ffmpeg`, run `./scripts/make-voice.sh`, and copy the
@@ -399,14 +429,17 @@ npm test
 | `tune.test.js` | Same seed gives the same tune; bar lengths; range; chord tones on strong beats; home-note endings; note grid per style; template rules |
 | `patterns.test.js` | Every pattern stays inside the loop and is sorted; piano bass and chord placement; backing varies between tunes; drum accents on beats; the metronome clicks evenly on every beat; the instructor counts correctly |
 | `descriptions.test.js` | Every rhythm variant has a description; every instrument gets a label in every style |
-| `state.test.js` | New tune and medley change key within the right family and keep the style |
-| `link.test.js` | Links round-trip to the identical tune; preset vs. style naming; malformed links are rejected |
+| `state.test.js` | New tune and medley change key within the right family and keep the style; the starting state opens a link; the tune is the only copy of key and style |
+| `link.test.js` | Links round-trip to the identical tune; preset vs. style naming; short links; malformed links are rejected |
+| `golden.test.js` | The generator still produces exactly the recorded tunes and backing for fixed seeds, so old links still play the same tune |
+| `scheduler.test.js` | With a fake audio clock: notes on time and in order; tune switches on bar lines; medley preparation and handover; muting; lamp beats match booked beats; tempo changes; stalls skipped, not burst |
+| `presets.test.js` | Every preset covers exactly the registered instruments, with a valid style, key and tempo |
 
 The tunes in tests use fixed seeds across every style and several keys, so
 failures are reproducible.
 
 **What isn't automatically tested:** sound quality, loudness balance, and the
-lamps lining up with the audio. These were checked during development by
+lamps lining up with the real audio output. These were checked during development by
 running the page in headless Firefox, recording the output, and measuring beat
 spacing, lamp timing, and instrument levels. That harness lived in a temporary
 folder and isn't part of the repo. If you change the scheduler, the lamp loop,
@@ -420,8 +453,9 @@ each click, each spoken number and each lamp should coincide.
   relying on it.
 - **Background tabs:** browsers slow timers in background tabs. The 100 ms
   lookahead copes in practice, and background playback was confirmed working.
-  A long throttle could cause gaps; moving the timer into a Web Worker is the
-  standard fix if that ever happens.
+  A long throttle now causes a gap rather than a burst of piled-up notes (the
+  scheduler skips overdue ticks); moving the timer into a Web Worker is the
+  standard fix if gaps ever become a problem.
 - **Crackling after long play (fixed).** In Firefox on macOS, playback used
   to start crackling and popping after several minutes. The cause was the
   sheer number of short-lived audio nodes (see "Keep the number of live audio

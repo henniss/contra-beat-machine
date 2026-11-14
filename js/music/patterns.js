@@ -9,7 +9,7 @@
 
 import { styleSpec, barTicks, PART_ORDER, TICKS_PER_BEAT, loopTicks } from './styles.js';
 import {
-  chordToneMidis, chordRootPc, pcAtOrAbove, scaleStep, pitchClass,
+  chordToneMidis, chordRootPc, pcAtOrAbove, scaleStep, pitchClass, chordAt,
 } from './theory.js';
 import { createRng } from './rng.js';
 
@@ -27,12 +27,6 @@ export function expandTune(tune) {
   });
   out.forEach((entry, i) => { entry.next = out[(i + 1) % out.length].bar; });
   return out;
-}
-
-function chordAt(bar, tick) {
-  return bar.chords.length === 1
-    ? bar.chords[0]
-    : bar.chords[Math.min(bar.chords.length - 1, Math.floor(tick / TICKS_PER_BEAT))];
 }
 
 const sameChord = (a, b) => a.degree === b.degree && a.quality === b.quality;
@@ -154,10 +148,10 @@ export function pianoPattern(tune) {
     }
     for (let b = 0; b < 2; b++) {
       const tick = t + b * TICKS_PER_BEAT;
-      const chord = chordAt(bar, b * TICKS_PER_BEAT);
+      const chord = chordAt(bar.chords, b * TICKS_PER_BEAT);
       const root = pianoBass(chord);
       const fifth = root + 7 >= 55 ? root - 5 : root + 7;
-      let bass = b === 1 && sameChord(chord, chordAt(bar, 0)) ? fifth : root;
+      let bass = b === 1 && sameChord(chord, chordAt(bar.chords, 0)) ? fifth : root;
       if (b === 1 && variant === 'walking' && changesNext(entry)) {
         bass = scaleStep(pianoBass(entry.next.chords[0]), -1, key);
       }
@@ -206,7 +200,7 @@ export function guitarPattern(tune) {
     }
     for (let b = 0; b < 2; b++) {
       const tick = t + b * TICKS_PER_BEAT;
-      const chord = chordAt(bar, b * TICKS_PER_BEAT);
+      const chord = chordAt(bar.chords, b * TICKS_PER_BEAT);
       const voicing = guitarVoicing(key, chord);
       const top = voicing.slice(-3);
       if (variant === 'boomChuck') {
@@ -249,7 +243,7 @@ export function banjoPattern(tune) {
     }
     for (let b = 0; b < 2; b++) {
       const tick = t + b * TICKS_PER_BEAT;
-      const chord = chordAt(bar, b * TICKS_PER_BEAT);
+      const chord = chordAt(bar.chords, b * TICKS_PER_BEAT);
       const tones = chordToneMidis(key, chord, 60, 72);
       if (variant === 'roll') {
         // A "forward roll": low string, middle string, the drone, then high.

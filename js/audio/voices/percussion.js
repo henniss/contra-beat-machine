@@ -1,23 +1,12 @@
 // Bodhrán (Irish frame drum), Québécois foot-tapping, and the metronome click,
-// built from short sine tones and bursts of filtered noise. Also provides the
-// shared noise buffer that other voices use for breath and hammer sounds.
+// built from short sine tones and bursts of filtered noise.
 //
 // Every stroke is pre-rendered a few times (the noise differs each time, so
 // repeated hits don't sound identical) and replayed at the event's velocity;
 // see prerender.js.
-import { createRenderCache, playBuffer, releaseWhenDone } from './prerender.js';
-
-const noiseCache = new WeakMap();
-
-export function noiseBuffer(ctx) {
-  if (!noiseCache.has(ctx)) {
-    const buffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    noiseCache.set(ctx, buffer);
-  }
-  return noiseCache.get(ctx);
-}
+import {
+  createRenderCache, playBuffer, releaseWhenDone, noiseBuffer,
+} from './prerender.js';
 
 function thump(ctx, output, when, { from, to, sweep, level, decay }) {
   const osc = ctx.createOscillator();

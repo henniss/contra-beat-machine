@@ -14,7 +14,7 @@ import { styleSpec, TICKS_PER_BEAT } from './styles.js';
 import { pickProgression } from './progressions.js';
 import {
   pitchClass, pcAtOrAbove, chordToneMidis, nearestChordTone, isChordTone,
-  scaleStep, scaleDistance, scalePitchClasses,
+  scaleStep, scaleDistance, scalePitchClasses, chordAt,
 } from './theory.js';
 
 export const MELODY_RANGE = { low: 55, high: 88 };
@@ -99,10 +99,6 @@ function barRhythm(rng, spec, role) {
 }
 
 // ---------- pitch ----------
-
-function chordAt(barChords, tick) {
-  return barChords.length === 1 ? barChords[0] : barChords[Math.min(barChords.length - 1, Math.floor(tick / TICKS_PER_BEAT))];
-}
 
 function clampToRange(midi, range) {
   let m = midi;
@@ -327,5 +323,3 @@ export function generateTune({ seed, style, key }) {
     },
   };
 }
-
-export { partRange };

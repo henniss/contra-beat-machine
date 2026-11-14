@@ -4,7 +4,7 @@
 
 import { INSTRUMENTS } from './instruments.js';
 import { PRESETS } from './presets.js';
-import { STYLES } from './music/styles.js';
+import { STYLES, loopBeats } from './music/styles.js';
 import { keyName } from './music/theory.js';
 import { describeInstrument } from './music/descriptions.js';
 
@@ -143,12 +143,13 @@ export function initUI({ store, actions, clock }) {
   }
 
   function idlePosition(state) {
+    const { style } = state.tune;
     partItems.forEach((li) => { li.classList.remove('current'); li.removeAttribute('aria-current'); });
-    position.textContent = state.style === 'waltz'
+    position.textContent = style === 'waltz'
       ? `bar – / ${STYLES.waltz.barsPerPart}`
-      : `beat – / ${STYLES[state.style].barsPerPart * STYLES[state.style].beatsPerBar * 4}`;
+      : `beat – / ${loopBeats(style)}`;
     lamps.forEach((l) => l.classList.remove('lit'));
-    setLampCount(STYLES[state.style].lamps);
+    setLampCount(STYLES[style].lamps);
   }
 
   function render(state, prev) {
@@ -161,8 +162,8 @@ export function initUI({ store, actions, clock }) {
       bpmInput.value = state.bpm;
       bpmValue.textContent = state.bpm;
     }
-    if (!prev || state.style !== prev.style) {
-      setBand(state.style);
+    if (!prev || state.tune.style !== prev.tune.style) {
+      setBand(state.tune.style);
       if (!state.playing) idlePosition(state);
     }
     if (!prev || state.presetId !== prev.presetId) {

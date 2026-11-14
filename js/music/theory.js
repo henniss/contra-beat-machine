@@ -1,6 +1,8 @@
 // Pitch, scale, and chord helpers. Pitches are MIDI note numbers (middle C = 60).
 // A key is { tonic: 'D', mode: 'major' }; a chord is { degree: 1..7, quality }.
 
+import { TICKS_PER_BEAT } from './styles.js';
+
 const NOTE_INDEX = {
   C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6, Gb: 6,
   G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11,
@@ -11,6 +13,14 @@ export const MODES = {
   major: [0, 2, 4, 5, 7, 9, 11],
   dorian: [0, 2, 3, 5, 7, 9, 10],
   minor: [0, 2, 3, 5, 7, 8, 10],
+};
+
+// Fiddle-friendly keys for each mode. Bands often change key between tunes,
+// so each new tune moves to a different key of the same kind.
+export const KEY_FAMILIES = {
+  major: ['D', 'G', 'A'],
+  dorian: ['E', 'A', 'D'],
+  minor: ['E', 'A', 'B'],
 };
 
 const mod12 = (n) => ((n % 12) + 12) % 12;
@@ -46,10 +56,6 @@ export function scalePitchClasses(key) {
   return MODES[key.mode].map((interval) => mod12(tonic + interval));
 }
 
-export function isInScale(midi, key) {
-  return scalePitchClasses(key).includes(mod12(midi));
-}
-
 // The triad built from the scale on a degree, e.g. degree 5 of D major = A major.
 export function diatonicChord(key, degree) {
   const pcs = scalePitchClasses(key);
@@ -74,13 +80,6 @@ export function isChordTone(midi, key, chord) {
 
 export function chordToneMidis(key, chord, low, high) {
   const pcs = chordPitchClasses(key, chord);
-  const out = [];
-  for (let m = low; m <= high; m++) if (pcs.includes(mod12(m))) out.push(m);
-  return out;
-}
-
-export function scaleMidis(key, low, high) {
-  const pcs = scalePitchClasses(key);
   const out = [];
   for (let m = low; m <= high; m++) if (pcs.includes(mod12(m))) out.push(m);
   return out;
@@ -120,4 +119,10 @@ export function scaleDistance(a, b, key) {
   let count = 0;
   for (let m = lo + 1; m <= hi; m++) if (pcs.includes(mod12(m))) count++;
   return b >= a ? count : -count;
+}
+
+// The chord sounding at `tick` in a bar with these chords (one per beat when
+// a bar has more than one).
+export function chordAt(chords, tick) {
+  return chords.length === 1 ? chords[0] : chords[Math.min(chords.length - 1, Math.floor(tick / TICKS_PER_BEAT))];
 }

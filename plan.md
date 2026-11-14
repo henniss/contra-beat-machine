@@ -1,496 +1,541 @@
-# Contra Beat Machine — Implementation Plan
+# Review and clean-up plan
 
-## 1. Starting point
+This plan comes from reading every source file, test and document in the
+repository. It lists the bugs found, the main pain points for whoever
+maintains the code, and a plan for each. Nothing here is implemented yet.
 
-The repository is empty: no commits, no files, and no research document. Everything below is new. There is no existing schema or data model to update, so section 4 defines the new ones.
+The original design document and build log is now `original-plan.md`.
 
-## 2. What we're building, musically
+## 1. Summary
 
-You asked me to make the music decisions, so here they are, with the reasons, so you can change any of them during review.
+The codebase is in good shape. It's small, every module has one job, the
+music code is pure and well tested, and the hard part (timing) follows the
+standard lookahead pattern. Four real bugs turned up, all in the code that
+sits between the user, the browser and the audio clock. Everything else is
+duplication or leftovers from earlier versions.
 
-### 2.1 What contra dance music is
+**Bugs, most serious first**
 
-Contra dances are danced to traditional fiddle tunes, mostly from New England, Ireland and Scotland, Québec, and the Appalachian "old-time" tradition. A few facts drive the whole design:
+1. **Clicking Play twice quickly the first time can start two copies of the
+   band.** One of them can never be stopped.
+2. **Playback after a stall comes out as a burst of notes.** A stall is any
+   time the timer stops running for a while, such as when a laptop sleeps or
+   the browser pauses the tab.
+3. **Play stays silent if the browser has paused the audio system.** This
+   happens on iPhones and in Safari after a phone call, a lock screen or a
+   headphone change.
+4. **Short links don't work, and the comment says they do.** A link with only
+   a preset name, like `#celtic-jig`, is thrown away and the page opens the
+   default preset. The comment at the top of `link.js` says a link without a
+   tune number starts a fresh random tune.
 
-- **Every contra tune is 64 beats long, in four 16-beat parts: A1, A2, B1, B2.** The dance figures are written to fit exactly, and the caller counts on this. The A part is played twice, then the B part is played twice. That is called "AABB" form.
-- **A "beat" is one dancer step.** The four red lights will flash once per step, so they show the pulse dancers actually walk to.
-- **There are two main tune types:**
-  - **Reels**: smooth and driving. The fiddle plays four quick notes per beat.
-  - **Jigs**: bouncy, with a "lilt". The fiddle plays three notes per beat (in 6/8 time).
-  Both have the same step pulse, so the four lights work the same way for both.
-- **Evenings end with a waltz.** The last dance of a contra evening is traditionally a couples waltz, not a contra. A waltz has **three beats per bar** ("ONE-two-three"), and each beat is one step. It isn't tied to the 64-beat dance length. Waltz tunes are still AABB, but each part is usually 16 bars long, so one time through is 64 bars (192 beats). In a waltz, lamp 4 is switched off and lamps 1–3 cycle once per bar.
-- **Bands play a medley.** A band typically plays a tune about three times through, then switches to a second tune in the same style without stopping.
-- **The rhythm section is what dancers lock onto.** The piano or guitar plays "boom-chuck": a bass note on the beat, then a short chord halfway between beats. In a waltz this becomes "oom-pah-pah": a bass note on beat 1, then chords on beats 2 and 3.
+**Pain points**
 
-### 2.2 BPM: yes, it matters
+5. **Guitar, banjo and bass build each new note in the middle of playback.**
+   The three plucked instruments generate the sound of each pitch the first
+   time it plays, inside the scheduler's tight loop. Every other instrument
+   now prepares its notes ahead of time. This one exception breaks the rule
+   that `CODE.md` asks maintainers to follow.
+6. **The app state stores the key and the style twice.** They're stored once
+   on their own and once inside the tune. Nothing reads the separate copy of
+   the key. The separate style is read, but it always equals the tune's style.
+7. **The fiddle and flute files are near copies.** They share the same
+   request, live fallback and playback code, with different numbers.
+8. **Small duplications.** Two identical helpers that find the chord at a
+   given moment. Beats-per-loop arithmetic written out by hand in the UI.
+   The list of instrument names copied into `presets.js`. The noise
+   generator living in the percussion file while the piano and flute use it
+   too.
+9. **Dead code.** Several functions and fields that nothing uses (listed in
+   §4.9).
+10. **The scheduler has no tests.** It's the most intricate stateful code in
+    the project: it switches tunes at the next bar line, hands over between
+    medley tunes, and records beats for the lamps. Bugs 1 and 2 live right
+    next to it.
 
-Tempo varies a lot in contra:
-- 108–124 steps per minute is the normal range. Around 116–120 is typical for a reel.
-- Slower tempos (95–105) help beginner walk-throughs and teaching.
-- Jigs often feel best a little slower than reels (about 110–116).
-- Waltzes are much slower in steps per minute: about 84–108, typically around 96.
+## 2. Constraints every change must respect
 
-**Decision:** BPM slider from 70 to 140, default 116. A small "typical" band is marked on the slider, and it moves with the style: 110–122 for reels and jigs, 88–104 for waltzes. Each preset sets its own BPM, and the user can change it after picking a preset.
+- **Don't change what any seed generates.** A link is just a seed, so any
+  change to the order or number of random draws in `js/music/` changes what
+  old links play. Every change below that touches `js/music/` is a pure
+  refactor. The existing test "same seed gives the same tune" isn't enough to
+  prove that, so step 0 adds a fixture that records exact output and checks
+  it before and after.
+- **No build step, no dependencies.** Plain ES modules and `node --test`.
+- **Audio changes must sound identical.** The fiddle and flute refactor
+  (§4.7) is checked by rendering notes offline before and after and comparing
+  them, the same way the crackle fix was checked.
+- No `target="_blank"` on any link.
 
-### 2.3 Instruments (8 musical instruments, plus the metronome and the instructor)
+## 3. Approach
 
-| Instrument | Role | What it plays |
-|---|---|---|
-| Fiddle | Melody | The tune. This is the core instrument of contra music. |
-| Flute | Melody | Doubles the tune, sometimes an octave up. Celtic flavor. |
-| Piano | Rhythm | Boom-chuck: bass note on the beat, chord on the off-beat. This is the backbone of New England contra bands. |
-| Guitar | Rhythm | Strummed chords, down on the beat and up on the off-beat. In jigs it strums down-up-down. |
-| Banjo | Rhythm/texture | An old-time "bum-ditty" pattern: one note on the beat, then a quick brush and thumb note. |
-| Upright bass | Bass | Root of the chord, then the fifth, with occasional walk-ups into chord changes. |
-| Bodhrán | Percussion | Irish frame drum. Steady stream of strokes with accents on the beat. |
-| Feet | Percussion | Québécois seated foot-tapping (heel-toe "ta-ka" on the beat and off-beat). |
-| Metronome | Click | A woodblock-style click on every beat, higher and brighter on beat 1 (where lamp 1 lights). Toggle and volume like the other instruments. |
-| Instructor | Spoken count | A voice that says "one, two, three, four" on each beat, matching the four lamps. It's a practice aid, not music. It has an icon, an on/off toggle, and a volume slider, just like the other instruments. |
+The work is ordered so that safety nets come first and riskier refactors
+last:
 
-I'm leaving out mandolin, accordion, and harmonium. They would mostly duplicate the sound of the eight above.
+1. **Safety nets.** Record exact generator output for a set of seeds. Add a
+   test for the scheduler, using a fake audio clock.
+2. **Bug fixes** (1–4), each with a test where the logic can be tested
+   outside a browser.
+3. **Pain points 5–9**, smallest risk first.
+4. **Docs.** Update `CODE.md` and the README where behaviour or file
+   locations changed.
 
-The instructor counts every beat, all the time. In a jig it still counts dancer steps ("one" on lamp 1, and so on), not the three notes within each beat. In a waltz it counts "one, two, three" on each bar. It is off by default in every preset. So is the metronome, which follows the same rules: one click per dancer step, with the accent on beat 1 of each four-beat group (or of each bar, in a waltz).
+## 4. Detailed changes
 
-**Rhythm variations.** Each backing instrument (piano, guitar, banjo, bass, bodhrán, feet) has two or three rhythm patterns per style, for example plain boom-chuck, boom-chuck with a push before the next bar, or a walking bass line. The tune's random seed picks one for the A part and one for the B part, so a new tune brings different backing, not just a new melody. The patterns described below are the most common choice for each.
+### 4.0 Safety net: a fixture of exact generator output
 
-**What each instrument does in a waltz.** Waltzes are gentle, so every pattern gets a softer, sparser version:
+A new test generates tunes and arrangements for a handful of seeds (every
+style, two keys each) and compares them with a saved JSON fixture. A hash of
+each would hide what changed, so the fixture stores the full output. It's
+roughly a hundred kilobytes, which is fine for a test file. A small script
+regenerates the fixture when the music is changed *on purpose*. The test
+then makes any accidental change to old links fail loudly.
 
-| Instrument | In a waltz |
+- **New** `test/fixtures/tunes.json`: the recorded output.
+- **New** `test/golden.test.js`: compares freshly generated tunes and
+  arrangements with the fixture.
+- **New** `scripts/record-golden.js`: rewrites the fixture. Run it with
+  `node scripts/record-golden.js`. A comment says it's only for deliberate
+  changes to the music.
+
+### 4.1 Bug: double Play click starts two schedulers
+
+**What happens.** `ensureAudio()` in `main.js` checks `if (scheduler)
+return` and then waits for the audio system to start. A second Play during
+that wait, from a double click or the space bar, passes the same check. Both
+calls then create a scheduler, and the second replaces the first in the
+variable. The first is already running on its own timer, and nothing can
+stop it any more. Starting the audio system usually takes a few
+milliseconds, but on a slow device or when Safari is waking up the output it
+can take hundreds.
+
+**Fix.** Keep the start-up *promise* rather than the result, so every caller
+waits for the same start-up:
+
+```js
+let audioReady = null;
+function ensureAudio() {
+  audioReady ??= (async () => { /* existing body */ })();
+  return audioReady;
+}
+```
+
+`togglePlay` must also read `store.get().playing` *after* the wait, which it
+already does.
+
+- `js/main.js`: as above.
+
+### 4.2 Bug: a burst of notes after a stall
+
+**What happens.** `Scheduler.pump()` books every tick whose time is earlier
+than "now + 100 ms". If the timer doesn't run for a second or more, because
+the laptop slept, the tab was frozen or the page was paused in the debugger,
+the next wake-up finds dozens of ticks already in the past. It books them all
+at once, and the audio system plays every overdue note immediately, in a
+pile. The beat lamps flash through the backlog the same way.
+
+**Fix.** At the start of `pump()`, if the next tick is already in the past by
+more than a small margin (`MAX_LATE_SECONDS = 0.05`), skip forward without
+playing. Advance the tick counter (and the loop counter, and the medley
+handover) one tick at a time until the next tick is in the future again, so
+the music resumes at the right place in the tune, in time. Skipped ticks
+don't play notes and don't push beats.
+
+So that skipping and playing never drift apart, `processTick()` gains a
+`silent` flag. Bar-line tune switches and end-of-loop handling still run,
+and only the note booking and beat recording are skipped:
+
+```js
+pump() {
+  const now = this.engine.ctx.currentTime;
+  while (this.running && this.nextTime < now - MAX_LATE_SECONDS) this.processTick({ silent: true });
+  const horizon = now + LOOKAHEAD_SECONDS;
+  while (this.running && this.nextTime < horizon) this.processTick({ silent: false });
+}
+```
+
+*Alternative rejected:* restarting the tune from the top after a stall. It's
+simpler, but a dancer mid-figure loses their place in the music.
+
+- `js/audio/scheduler.js`: as above. Remove the generic `push(queue, item)`
+  helper while there. It has exactly one caller, so the queue limit can sit
+  inline in `pushBeat`.
+
+### 4.3 Bug: Play stays silent after the browser pauses the audio
+
+**What happens.** `ensureAudio()` resumes the audio system only on the very
+first Play. Some browsers pause it again later: iOS Safari after a phone
+call, a lock screen or another app taking the audio, and Safari when
+headphones are plugged in. After that, the scheduler books notes on a clock
+that isn't moving. The page shows "playing", but nothing sounds, and the
+lamps don't light.
+
+**Fix.** Every time Play starts playback, call `engine.start()`, which
+already resumes the audio system if it isn't running and does nothing
+otherwise. Browsers allow a resume because Play is a user click.
+
+- `js/main.js`: in `togglePlay`, on the "start" branch, `await engine.start()`
+  before `scheduler.start()`.
+
+### 4.4 Bug: short links, and a misleading comment
+
+**What happens.** `parseHash` needs all three pieces: preset or style, key
+and tune number. `#celtic-jig` and `#celtic-jig/E-dorian` are rejected, so
+the page quietly opens the default New England Reel. The comment at the top
+of `link.js` says a link without the tune number "simply starts a fresh
+random tune", which isn't what the code does.
+
+**Fix.** Make the key and the tune number optional, in that order:
+
+| Link | Opens |
 |---|---|
-| Fiddle, flute | The melody, with longer notes (see section 2.5). The flute doubles the fiddle an octave up. |
-| Piano | Oom-pah-pah: bass note on beat 1, soft chords on beats 2 and 3. |
-| Guitar | Bass note on beat 1, light strums on beats 2 and 3. |
-| Banjo | A quiet rolling arpeggio of the chord's notes, two notes per beat. It's not in the waltz preset, but it still works if you switch it on. |
-| Upright bass | One long root note per bar, alternating with the fifth on repeated chords. |
-| Bodhrán | A soft stroke on beat 1 and light brushes on beats 2 and 3. |
-| Feet | Heel on beat 1, quiet toe taps on beats 2 and 3. |
-| Metronome | Clicks on all three beats, accented on beat 1. |
-| Instructor | "One, two, three." |
+| `#celtic-jig/E-dorian/abc12` | that exact tune (unchanged) |
+| `#celtic-jig/E-dorian` | the Celtic Jig preset, a fresh random tune in E dorian |
+| `#celtic-jig` | the Celtic Jig preset, a fresh random tune in its usual key |
+| `#jig` | the first jig preset, a fresh random tune |
+| anything else | ignored, as now |
 
-### 2.4 Presets (5)
+Once the tune is generated, the address bar fills in the full link as usual.
+This is a small change to the link format. Full links keep working exactly as
+before.
 
-| Preset | Style | Key | BPM | Swing | Instruments on |
-|---|---|---|---|---|---|
-| New England Reel | reel | D major | 118 | slight | fiddle, piano, bass, guitar |
-| Celtic Jig | jig | E minor (dorian) | 112 | none (jigs lilt naturally) | fiddle, flute, guitar, bodhrán |
-| Old-Time Breakdown | reel | A major | 122 | moderate | fiddle, banjo, guitar, bass |
-| Québécois Stomp | reel | G major | 116 | slight | fiddle, piano, feet, bass |
-| Last Waltz | waltz | D major | 96 | none | fiddle, flute, piano, bass |
+**Data model change.** `parseHash` returns `{ preset, key, seed }`, where
+`key` and `seed` may now be `null`. `applyLink` uses the preset's key when
+`key` is null and a random seed when `seed` is null.
 
-When you pick a preset, it sets the style, key, BPM, swing, which instruments are on, and their volumes. It also generates a fresh tune in that style. The user can then change anything.
+- `js/link.js`: optional pieces; correct the header comment.
+- `js/state.js`: `applyLink` handles the null fields.
+- `test/link.test.js`: move `#reel` and `#reel/D-major` from the "ignored"
+  list to a new test for short links. Keep `#`, `''`, bad keys, bad seeds and
+  extra pieces in the "ignored" list.
 
-### 2.5 How tunes are generated
+### 4.5 Plucked strings: prepare notes ahead of time
 
-Every tune is generated from rules, not taken from a recording or score. A random "seed" number makes each tune reproducible: the same seed always gives the same tune. The rules are designed to sound like a fiddle tune rather than random notes:
+**What happens.** `pluck.js` renders a pitch's buffer with the string
+simulation (Karplus-Strong) the first time `play()` meets it. That's tens of
+thousands of loop iterations per pitch, inside the scheduler's pump. A strum
+with several new pitches does it several times in one pump. The 100 ms of
+lookahead usually hides it, but it's exactly the kind of main-thread spike the
+scheduler is meant to avoid. It also breaks the rule in `CODE.md`: "voices
+pre-render notes".
 
-1. **Chord progression.** Each 8-bar part (16 beats; one bar = 2 beats) gets a chord progression. It is picked from a small library of common folk progressions, e.g. `I I IV V | I I IV-V I`. The B part uses a different template from the A part, often starting on the IV chord.
-2. **Phrase structure.** Fiddle tunes repeat themselves, and the generator copies that. Bars 1–2 form a motif. Bars 3–4 vary it and end on a "half cadence", an unresolved stop on the V chord. Bars 5–6 repeat bars 1–2. Bars 7–8 end firmly on the home note.
-3. **Notes.** Strong positions in the beat (the downbeat and the middle) get a chord tone. Weak positions get scale steps leading toward the next chord tone. Leaps are rare. Notes stay within a comfortable fiddle range. The B part sits higher than the A part, as it usually does in real tunes.
-4. **Rhythm.** Reels mostly run four notes per beat. Occasionally two notes merge into one longer note, or a quick three-note ornament (a "roll") appears. Jigs mostly run three notes per beat, sometimes a long-short pair. Bar 8 always ends on a held note.
-5. **Waltzes follow the same rules, adjusted for 16-bar parts and a slower, singing melody.** Each part is two 8-bar halves. The motif is 4 bars long. Bars 5–8 vary it and end on the half cadence. Bars 9–12 repeat the motif. Bars 13–16 end on the home note. Chord progressions come from a separate library of 16-bar waltz templates, with one chord per bar. Rhythms are mostly one or two notes per beat. The generator mixes in long-short pairs and half notes, and the final bar is one note held for all three beats. Every bar starts on a chord tone, and the melody moves mostly by step, with fewer leaps than a reel.
-6. **New keys.** Each new tune, whether from the New tune button or the medley, moves to a different key of the same kind, as bands often do between tunes: D, G, or A for major presets; E, A, or D for dorian; E, A, or B for minor. A preset always starts in its own key.
-7. **Medley.** Off by default: the current tune repeats until you press New tune. When the medley checkbox is on, a new tune in the same style is generated after three times through, and play continues without a gap. Waltzes switch after two times through instead, because one waltz loop is already about two minutes long.
+**Fix.** Add `prepare(events)` to the pluck voice. It renders every pitch the
+tune uses, using `longestByPitch` from `prerender.js`. The scheduler already
+calls `prepare` when a tune is loaded and a loop before a medley handover.
+`play()` keeps the existing render-on-demand as a fallback, so nothing can
+be silent.
 
-## 3. Technical approach
+The plucked buffers don't depend on tempo, because their length is fixed by
+the instrument, so the tempo margin doesn't apply.
 
-### 3.1 Stack
+- `js/audio/voices/pluck.js`: add `prepare`.
 
-- **A plain static website: HTML, CSS, and JavaScript modules, with no build step and no runtime libraries.** It can be served from any static host, including GitHub Pages. To run it locally, use any static file server; modules won't load from a double-clicked file.
-- **All instrument sound is synthesized live in the browser with the Web Audio API.** The only recordings are four tiny voice clips for the instructor (section 3.5).
-- A `package.json` exists only to declare modules and a test script. Tests use Node's built-in test runner, so there are no dependencies.
+### 4.6 One source of truth for key and style
 
-### 3.2 Timing: the lookahead scheduler
+**What happens.** The app state has `key` and `style` fields, and the tune
+has its own `key` and `style`. Nothing reads `state.key`; every reader uses
+`state.tune.key`. `state.style` is read in three places, but it always equals
+`state.tune.style`. Keeping two copies in step is a trap for the next person
+to add a feature: for example, a key picker that updates one copy and not
+the other.
 
-Browser timers are too jittery to trigger notes directly. We use the standard "two clocks" pattern:
+**Fix.** Remove both fields from the state. Read `tune.style` and `tune.key`
+everywhere.
 
-- A timer wakes up every 25 ms. It schedules every note that falls within the next 100 ms, using the audio hardware clock. That clock is sample-accurate.
-- Time is counted in **ticks: 12 ticks per beat.** Twelve divides evenly into four reel notes per beat (3 ticks each), three jig notes per beat (4 ticks each), and two waltz notes per beat (6 ticks each).
-- **Swing** delays every second reel note by a small fraction of its length, which gives a slight lilt. Jigs and waltzes ignore swing.
-- **Tempo changes** take effect on the next tick, because the scheduler converts each tick to seconds at the current BPM as it goes. No re-timing is needed.
-- **Beat lights.** When the scheduler schedules a beat, it pushes that beat's audio time onto a queue. A screen-refresh loop lights the matching lamp when the audio clock reaches that time. The lamp number is the beat number counted in a cycle of four for reels and jigs, or three for waltzes. So in a waltz, lamp 1 always marks the start of a bar. The lights stay in sync with what you hear, not with when the note was scheduled.
+**Data model change.** The app state becomes:
 
-### 3.3 Arrangement model
-
-When a tune is generated, each instrument's pattern function runs once. It produces the full list of notes for that instrument across one time through the tune. That is 64 beats (768 ticks) for a reel or jig, and 192 beats (2,304 ticks) for a waltz. All the per-style numbers (beats per bar, bars per part, lamp count, and so on) live in one style table (section 4), so the scheduler and UI never hard-code them. The scheduler walks those lists in tick order. Scheduling is cheap and the musical logic is easy to test.
-
-Precomputing is fine because a loop is small (a few hundred events per instrument, even for a waltz). It also makes medley switching simple: build the next tune's lists ahead of time, then swap them in at the loop boundary.
-
-### 3.4 Changes while playing
-
-- **New Tune button:** the new tune starts at the next bar line (at most 2 beats away, or 3 in a waltz), so it stays in time. A new tune always starts from A1, beat 1. I considered waiting for the 64-beat boundary, which is what a real band does. I rejected it because it can mean 30 seconds of no visible response.
-- **Preset change:** same as New Tune, plus mixer and BPM changes. The mixer and BPM changes apply immediately. Switching between a waltz and a reel or jig takes effect at the same bar line. At that moment the lamp count changes (lamp 4 turns off or back on), the count restarts at "one", and the BPM jumps to the new preset's tempo.
-- **Toggling an instrument off:** its volume fades to zero over 20 ms, which cuts any ringing notes without a click. The scheduler also stops scheduling it. Toggling it back on resumes it at its correct place in the tune, because the loop never stopped.
-
-### 3.5 Sound design (one voice per instrument)
-
-Each voice is a small module that takes a pitch, a start time, a length, and a loudness, and schedules audio nodes for that note.
-
-- **Fiddle:** two slightly detuned sawtooth oscillators. They pass through filters that imitate the resonances of a violin body (peaks around 300 Hz, 1 kHz, and 3 kHz). The bow attack takes about 30 ms, and vibrato fades in on longer notes.
-- **Flute:** a sine wave with a little triangle, plus a puff of filtered noise at the start of each note for breath, and gentle vibrato.
-- **Piano:** several sine partials, slightly out of tune with each other the way real piano strings are. Each decays on its own curve, with a short noise "hammer" click. It will sound more like a soft electric piano than a grand. That's acceptable.
-- **Guitar, banjo, bass:** a physical model of a plucked string (Karplus-Strong). It is rendered once per pitch into a small cached buffer, then replayed. The three instruments differ in brightness, decay, and pitch range. The banjo is bright with a short decay. The bass is dark and filtered. Guitar strums play the strings 10–15 ms apart, like a real strum.
-- **Bodhrán:** a low sine "thump" whose pitch drops from about 120 to 60 Hz, mixed with a filtered noise burst. Off-beat strokes are quieter and higher-pitched.
-- **Feet:** a low thump for the heel and a short, higher click for the toe.
-- **Instructor:** four short recorded clips of a voice saying "one", "two", "three", and "four". Waltzes simply never use the "four" clip. They are loaded and decoded when the audio system starts, then scheduled on the audio clock exactly like notes, so the count stays locked to the beat at any tempo.
-  - **Where the clips come from:** generated once with an open-source text-to-speech program (Piper, using a voice with a permissive license, or espeak-ng as a fallback), then committed as small compressed audio files of a few KB each. A short script in the repository documents how to regenerate them.
-  - **Lining up with the beat:** the silence at the start of each clip is trimmed. Each clip also has a small stored offset, so the vowel lands on the beat rather than the opening consonant. That's how a spoken count sounds "on time".
-  - **Fast tempos:** at 140 BPM a beat is about 430 ms. Each clip will be kept under about 350 ms. If a clip would run into the next count, it is faded out early instead of being sped up, because speeding speech up makes it sound squeaky.
-  - **Beat 1 emphasis:** "one" plays slightly louder than the others, to match the larger first lamp.
-
-**Mixing chain:** each voice → its instrument's volume control → a master volume → a compressor (so stacked instruments don't clip) → the speakers. A small shared reverb gives a "dance hall" feel. Its echo is generated in code rather than loaded from a file.
-
-**Volume sliders** run 0–100%. They are mapped to gain on a squared curve, so the slider feels even to the ear.
-
-### 3.6 User interface
-
-Top to bottom:
-
-1. **Title bar.**
-2. **Transport row:** a big Play/Stop button (the spacebar also works), a New Tune button, the BPM slider with its number shown, a master volume slider, and the medley checkbox.
-3. **Beat display:** four round red lamps. Lamp 1 is slightly larger, because it marks the start of each 4-beat group (or each bar, in a waltz). In a waltz, lamp 4 is disabled: it shows as a faint hollow ring that never lights, and screen readers skip it. The lamps stay in place, so the layout doesn't jump when the style changes. Next to them, a small **phrase readout**: `A1 · A2 · B1 · B2` with the current part highlighted, and "beat 23 / 64". In a waltz it shows "bar 7 / 16" instead, since 192 beats is too many to count usefully. Clicking anywhere on the beat display covers it with a plain panel (and clicking again uncovers it), so you can practise keeping time without the lamps. A small Hide/Show button in its corner does the same from the keyboard. This is a small addition beyond what you asked for. Dancers and callers think in these phrases, so it's useful, but it's cheap to drop if you don't want it.
-4. **Presets:** a row of five cards, each with a name and a one-line description. The active one is highlighted. If the user changes anything afterward, the highlight changes to "Custom".
-5. **Instrument grid:** ten cards (the eight instruments, the metronome, and the instructor), five across on desktop and two across on smaller screens. Each card has a large **SVG icon button** (click to turn the instrument on or off; it dims and goes grey when off), the instrument name, and a horizontal volume slider.
-
-Also:
-- Browsers block audio until the user clicks something. The audio system is created on the first Play click.
-- All controls are real buttons and sliders, with labels, so they work with the keyboard and screen readers. Each icon button reports whether it is on or off.
-
-## 4. Data models
-
-These are plain JavaScript objects. The shapes are shown in TypeScript-style notation for clarity, but the code is plain JavaScript.
-
-```ts
-// ---- Instruments ----
-type InstrumentId =
-  'fiddle' | 'flute' | 'piano' | 'guitar' | 'banjo' | 'bass' | 'bodhran' | 'feet'
-  | 'metronome' | 'instructor';
-
-interface InstrumentDef {
-  id: InstrumentId;
-  name: string;                 // display name, e.g. "Bodhrán"
-  role: 'melody' | 'rhythm' | 'bass' | 'percussion' | 'count';
-  icon: string;                 // inline SVG markup
-  createVoice(ctx: AudioContext, output: AudioNode): Voice;
-  pattern(tune: Tune): NoteEvent[];   // one full time through the tune, sorted by tick
-}
-
-interface Voice {
-  play(ev: NoteEvent, when: number, secondsPerTick: number): void;
-}
-
-// ---- Musical events ----
-interface NoteEvent {
-  tick: number;          // 0 .. loopTicks-1 (12 ticks per beat; see StyleSpec)
-  durationTicks: number;
-  midi?: number | number[]; // single pitch, or a chord (strum or chuck); absent for the instructor
-  word?: 1 | 2 | 3 | 4;     // instructor only: which count clip to play
-  velocity: number;      // 0..1
-  articulation?: 'normal' | 'accent' | 'ghost' | 'roll' | 'heel' | 'toe' | 'up' | 'down';
-}
-
-// ---- Styles ----
-type Style = 'reel' | 'jig' | 'waltz';
-
-// One entry per style, in js/music/styles.js. Everything that differs
-// between styles is read from here instead of being hard-coded.
-interface StyleSpec {
-  id: Style;
-  beatsPerBar: 2 | 3;       // reel and jig: 2; waltz: 3
-  barsPerPart: 8 | 16;      // reel and jig: 8; waltz: 16
-  lamps: 4 | 3;             // lamps that cycle; waltz disables lamp 4
-  stepTicks: 3 | 4 | 6;     // melody grid: reel 3, jig 4, waltz 6
-  typicalBpm: [number, number];  // band shown on the BPM slider
-  swingAllowed: boolean;    // reel only
-  medleyRepeats: number;    // reel and jig: 3; waltz: 2
-  // derived: barTicks = beatsPerBar * 12
-  //          loopTicks = barTicks * barsPerPart * 4  (768 or 2304)
-}
-
-// ---- Tunes ----
-
-interface Key {
-  tonic: string;         // 'D', 'G', 'A', 'E', ...
-  mode: 'major' | 'dorian' | 'minor';
-}
-
-interface Bar {
-  chords: ChordSymbol[]; // 1 chord per bar, or 2 (one per beat; reels and jigs only)
-  melody: NoteEvent[];   // ticks relative to the bar start (0 .. barTicks-1)
-}
-
-type ChordSymbol = { degree: 1|2|3|4|5|6|7; quality: 'maj' | 'min' };
-
-interface Tune {
-  seed: number;
-  style: Style;
-  key: Key;
-  parts: { A: Bar[]; B: Bar[] };   // barsPerPart bars each
-  // Played order is A, A, B, B.
-  // Reel or jig: 32 bars of 2 beats = 64 beats. Waltz: 64 bars of 3 beats = 192 beats.
-}
-
-// ---- Presets and app state ----
-interface MixerChannel { enabled: boolean; volume: number /* 0..1 */ }
-
-interface Preset {
-  id: string;
-  name: string;
-  description: string;
-  style: Style;
-  key: Key;
-  bpm: number;
-  swing: number;          // 0..0.2, fraction of a note length
-  mixer: Record<InstrumentId, MixerChannel>;
-}
-
-interface AppState {
-  playing: boolean;
-  presetId: string | 'custom';
-  style: Style;
-  key: Key;
-  bpm: number;            // 70..140
-  swing: number;
-  masterVolume: number;   // 0..1
-  medley: boolean;        // switch to a new tune after medleyRepeats times through
-  mixer: Record<InstrumentId, MixerChannel>;
-  tune: Tune;
+```js
+{
+  playing, masterVolume, medley,
+  presetId, bpm, swing, mixer,
+  tune,          // carries style and key
 }
 ```
 
-## 5. Files to create
+- `js/state.js`:
+  - drop `style` and `key` from `presetFields` and `applyLink`;
+  - `withNewTune` uses `state.tune.style`;
+  - `initialState` takes an optional link instead of generating a random tune
+    that `main.js` then throws away.
+- `js/main.js`: the medley callback becomes `store.update({ tune })`.
+  `createStore(initialState(startLink))`.
+- `js/ui.js`: compare `state.tune.style` with `prev.tune.style`.
+  `idlePosition` reads the tune's style.
+- `test/state.test.js`: drop the `change.key` assertion. Assert on
+  `change.tune.key` instead.
 
-```
-index.html
-css/style.css
-js/main.js
-js/state.js
-js/presets.js
-js/instruments.js
-js/icons.js
-js/ui.js
-js/audio/engine.js
-js/audio/scheduler.js
-js/audio/voices/fiddle.js
-js/audio/voices/flute.js
-js/audio/voices/piano.js
-js/audio/voices/pluck.js
-js/audio/voices/percussion.js
-js/audio/voices/instructor.js
-assets/voice/one.ogg, two.ogg, three.ogg, four.ogg   (plus .m4a copies for Safari)
-scripts/make-voice.sh
-js/music/rng.js
-js/music/styles.js
-js/music/theory.js
-js/music/progressions.js
-js/music/tune.js
-js/music/patterns.js
-test/theory.test.js
-test/tune.test.js
-test/patterns.test.js
-package.json
-README.md
+### 4.7 Fiddle and flute: share the held-note logic
+
+**What happens.** `fiddle.js` and `flute.js` each have the same four pieces:
+`request` (pre-render a pitch), `playLive` (the fallback), a short-note cut-off,
+and `play` (choose a buffer or the fallback, then shape the release). Only
+the numbers and the tone recipe differ. A fix to one is easy to forget in the
+other.
+
+**Fix.** A new helper in `prerender.js`, `createHeldNoteVoice`, takes the
+parts that differ:
+
+```js
+createHeldNoteVoice(ctx, input, {
+  level, release, shortest,      // numbers
+  renderNote(c, out, midi, seconds),     // the pre-render recipe at velocity 1
+  playLive(ev, when, dur),               // the full live note (fallback)
+})
+// returns { prepare(events, secondsPerTick), play(ev, when, secondsPerTick) }
 ```
 
-What each one does:
+`fiddle.js` and `flute.js` keep their tone recipes (`bowedTone`, `pipeTone`,
+`breathPuff`) and their live envelopes, and shrink to the recipe plus one call.
+Nothing audible should change.
 
-- **`index.html`**: the page structure. It contains the transport row, beat lamps, phrase readout, preset row, and an empty instrument grid that the UI code fills in. It loads the main script as a module.
-- **`css/style.css`**: the layout (a grid that drops from four columns to two on narrow screens), the lamp styles (dark red when off, bright red with a glow when lit, with a fast fade, and a faint hollow ring for the disabled fourth lamp in a waltz), dimmed styling for disabled instruments, slider styling, and light and dark color themes.
-- **`js/main.js`**: the entry point. It builds the initial state from the default preset, generates the first tune, hands everything to the UI, and creates the audio engine on the first Play.
-- **`js/state.js`**: a tiny state store with get, update, and subscribe. It applies a preset, marks the state "Custom" when the user deviates from a preset, and generates the next medley tune.
-- **`js/presets.js`**: the five preset definitions from section 2.4.
-- **`js/instruments.js`**: the instrument registry. It connects each instrument's name, icon, voice, and pattern function.
-- **`js/icons.js`**: ten simple single-color SVG silhouettes (a head with a speech bubble for the instructor, a pendulum metronome). They are colored through CSS so the dimmed state is one style rule.
-- **`js/ui.js`**: builds the instrument cards and preset cards, and connects the buttons and sliders to the state. It runs the screen-refresh loop that lights the lamps and updates the phrase readout. It enables or disables lamp 4, and moves the slider's typical band, whenever the style changes. It also handles the spacebar.
-- **`js/audio/engine.js`**: creates the audio system. It builds the mixing chain (per-instrument volume, master volume, compressor, reverb), applies volume and mute changes with short fades, and creates each instrument's voice.
-- **`js/audio/scheduler.js`**: the lookahead scheduler from section 3.2. It handles start and stop, tempo, swing, and the queue of beat times for the UI. It reads the loop length and lamp count from the current tune's style. It also swaps in a new tune at the next bar line, or at the loop boundary for medley changes.
-- **`js/audio/voices/fiddle.js`**, **`flute.js`**, **`piano.js`**: the synthesized voices described in section 3.5.
-- **`js/audio/voices/pluck.js`**: the plucked-string model with its per-pitch buffer cache. It exports three configurations: guitar, banjo, and bass.
-- **`js/audio/voices/percussion.js`**: the bodhrán, feet, and metronome voices.
-- **`js/audio/voices/instructor.js`**: loads and decodes the four count clips. It plays the right clip for each beat, applying the per-clip timing offset and the early fade described in section 3.5. If the clips fail to load, the instructor card shows as unavailable and everything else keeps playing.
-- **`assets/voice/`**: the four count clips. Ogg format is the primary copy. M4A copies exist because older Safari versions can't play Ogg. Each is a few KB.
-- **`scripts/make-voice.sh`**: the one-time script that generates the clips with the text-to-speech program, trims the silence, and compresses them. It also records each clip's timing offset, which is copied into the instructor voice. It isn't needed to run the site.
-- **`js/music/rng.js`**: a small seeded random number generator. It has helpers for picking an item, picking with weights, and random chance.
-- **`js/music/styles.js`**: the style table from section 4, one entry each for reel, jig, and waltz, plus a helper that works out bar and loop lengths in ticks.
-- **`js/music/theory.js`**: note names and pitch numbers, scales for each mode, chord tones for a scale degree, and helpers for the nearest chord tone and stepping up or down the scale.
-- **`js/music/progressions.js`**: the library of chord progression templates, with weights. It has 8-bar templates for reels and jigs and 16-bar templates for waltzes, each with separate lists for A parts and B parts.
-- **`js/music/tune.js`**: the melody generator from section 2.5, for reels, jigs, and waltzes.
-- **`js/music/patterns.js`**: one pattern function per instrument and style. Each one turns a tune into the full loop of note events (boom-chuck piano, strums, bum-ditty banjo, bass root-fifth with walk-ups, bodhrán and feet rhythms, melody doubling for the flute), plus the waltz versions from section 2.3.
-- **`test/theory.test.js`**: checks scales and chord tones for each key and mode.
-- **`test/tune.test.js`**: checks that the same seed gives the same tune; each part has the right number of bars (8, or 16 for a waltz); every note stays in range; strong-position notes are chord tones; the last bar of each part ends on the home note; and each style uses its own note grid (3-, 4-, or 6-tick steps).
-- **`test/patterns.test.js`**: checks that every pattern stays within the loop and is sorted; piano bass notes land on beats and chords on off-beats in reels and jigs; waltz piano puts bass on beat 1 and chords on beats 2 and 3; drum accents land on beats; and the instructor produces one count per beat, cycling 1-2-3-4 (64 counts) or 1-2-3 in a waltz (192 counts).
-- **`package.json`**: declares modules and a test script that runs Node's built-in test runner. No dependencies.
-- **`README.md`**: what the site is, how to run it locally, and a short guide to contra music terms (reel, jig, waltz, AABB, 64 beats).
+**Check.** Before and after, render a short phrase for each voice in an
+offline audio context, with the fallback forced off, and compare loudness.
+That's the method used for the crackle fix. The difference should be zero, or
+within the run-to-run noise of the breath. `CODE.md` notes that the old
+comparison harness lived in a temporary folder. Recreate it in the
+scratchpad; don't add it to the repo.
 
-No existing files are modified, since there are none.
+*Alternative rejected:* merging the piano in too. Its damper and ring-out
+are different enough that a shared helper would need options just for the
+piano, and that would be more confusing than the duplication it saves.
 
-## 6. Alternatives considered and rejected
+- `js/audio/voices/prerender.js`: add `createHeldNoteVoice`.
+- `js/audio/voices/fiddle.js`, `js/audio/voices/flute.js`: use it.
 
-- **Using the Tone.js audio library.** It has a good scheduler and ready-made synthesizers. I rejected it because the scheduler we need is about 80 lines, and its stock synths wouldn't sound more like a fiddle than custom ones. A dependency-free site is simpler to host and maintain. This is the easiest decision to reverse if hand-built synthesis proves painful.
-- **Recorded samples instead of synthesis.** Real samples would sound much more realistic, especially for fiddle and piano. I rejected them for now: they need license-checked sample libraries, many megabytes of downloads, and loading logic. Each voice sits behind the same small interface, so a sample-based voice can replace a synthesized one later without touching anything else.
-- **Playing real traditional tunes (e.g. "Soldier's Joy") instead of generating them.** They're public domain and would sound authentic. But you asked for synthetic music, and they'd need careful hand transcription. Generated tunes also never repeat. A "classic tunes" preset could be added later using the same tune format.
-- **A framework (React, Svelte) or a build tool.** That's too much machinery for one page with about 20 controls. Plain modules and a small state store are enough.
-- **Using emoji as instrument icons.** There's no emoji for an upright bass, the flute emoji is too new to show up everywhere, and emoji can't be cleanly dimmed or recolored. Custom SVG icons are consistent.
-- **Using the browser's built-in speech for the instructor.** It needs no files, but you can't schedule it on the audio clock. Its start delay varies from roughly 50 to 300 ms depending on the browser and voice, so the count would drift off the beat. It also sounds different on every device.
-- **Synthesizing the spoken words in code.** It would keep the "no recordings" purity, but robotic synthesized speech is hard to make intelligible. Four tiny clips are far simpler.
-- **Showing only three lamps in a waltz, or counting a waltz in fours.** Removing the fourth lamp would make the layout jump when the style changes. Counting a waltz in fours would cut across its bars and confuse anyone dancing. Disabling lamp 4, as you suggested, avoids both.
-- **Driving the lamps from the scheduling timer.** The lamps would run about 100 ms ahead of the sound. Instead, the lamps follow the audio clock (section 3.2).
-- **Generating notes bar by bar during playback.** It would allow endless variation, but precomputing the loop is simpler to test, and medley mode provides variety anyway.
+### 4.8 Small duplications
 
-## 7. Risks and dependencies
+- **Chord at a given moment.** `chordAt` exists in both `tune.js` (taking a
+  list of chords) and `patterns.js` (taking a bar), plus a copy in
+  `tune.test.js`. Keep one, taking the chord list, in `theory.js`. Callers
+  in `patterns.js` pass `bar.chords`.
+- **Beats per loop in the UI.** `idlePosition` works out
+  `barsPerPart × beatsPerBar × 4` by hand. Use `loopBeats(style)` from
+  `styles.js`, which already exists but is unused. The scheduler's
+  `loopTicks / TICKS_PER_BEAT` becomes the same call.
+- **Instrument names in presets.** `presets.js` repeats the list of
+  instrument names, because importing `instruments.js` would pull the audio
+  code into the music tests. Keep the list where it is, and add a test that
+  it matches the instrument registry exactly. Then adding an instrument and
+  forgetting the presets fails a test rather than crashing the mixer at run
+  time.
+- **The noise buffer.** `noiseBuffer` lives in `percussion.js`, but the piano
+  and flute import it from there. Move it to `prerender.js`, the shared
+  audio helpers.
+- **Fiddle-friendly keys.** `KEY_FAMILIES` is musical data, but it lives in
+  `state.js`, so `link.js` imports the state module just to read it. Move it
+  to `theory.js`, next to the modes.
 
-- **Melody quality is the biggest risk.** Rule-based melodies can sound aimless. Mitigations: strict phrase repetition (which is what makes trad tunes sound like trad tunes), chord tones on strong positions, and a tune that ends firmly. The rule weights live in one file so they can be tuned by ear. Expect a round or two of adjusting after first listen.
-- **Waltz melodies are more exposed.** Long, slow notes leave nowhere to hide, so an aimless melody is more obvious in a waltz than in a fast reel. The synthesized fiddle's tone is also more noticeable on held notes. Expect the waltz rules and the fiddle's vibrato to need extra tuning by ear.
-- **Synthesized fiddle realism.** A synthesized bowed string tends to sound like an old video game. The body filters and vibrato help, but it won't fool anyone. That's fine for a beat machine, and samples can replace it later (section 6).
-- **Performance on phones.** The plucked-string cache and simple voices keep the processing load low. The worst case is all 8 instruments in a reel, about 30 notes per second. That's well within what Web Audio handles, but it should be checked on a mid-range phone.
-- **Background tabs.** Browsers slow down timers in background tabs. The 100 ms lookahead covers small delays, but long slowdowns could cause dropouts. That's acceptable for this use. A more robust scheduler running in a background worker is a possible later fix.
-- **Browser support.** This needs a current browser (Chrome, Firefox, Safari, Edge). Safari is the one most likely to differ in audio behavior, so test it specifically.
-- **Audio won't start without a click.** This is handled by creating the audio system on the first Play click.
-- **Instructor clips.** Their license must be checked: the text-to-speech voice's license has to allow redistributing its output. Timing offsets need tuning by ear. Safari needs the M4A copies.
-- **External dependencies: none at runtime.** The text-to-speech program is needed only to regenerate the clips. Fonts come from the system font stack, so the site works offline once loaded.
+Files:
+- `js/music/theory.js`: add `chordAt`, `KEY_FAMILIES`.
+- `js/music/tune.js`, `js/music/patterns.js`: import `chordAt`.
+- `js/ui.js`, `js/audio/scheduler.js`: use `loopBeats`.
+- `js/state.js`, `js/link.js`: import `KEY_FAMILIES` from `theory.js`.
+- `js/audio/voices/percussion.js`, `piano.js`, `flute.js`, `prerender.js`:
+  move `noiseBuffer`.
+- `test/tune.test.js`: import `chordAt`.
+- **New** `test/presets.test.js`: preset mixers cover exactly the
+  registered instruments; every preset's style and key are valid; every
+  preset's key is in its mode's key family. Without that last check,
+  `nextKey` and links would misbehave.
 
-## 8. Future work (out of scope)
+### 4.9 Dead code to remove
 
-- An optional sample-based fiddle and piano.
-- Saving and sharing a tune by seed in the URL.
-- A tap-tempo button.
-- Remembering the user's mixer settings between visits.
-- More styles: hornpipes, marches, and slip jigs.
+Each of these has no callers outside its own definition (tests excepted where
+noted):
+
+| Where | What | Notes |
+|---|---|---|
+| `audio/engine.js` | `started` getter, `setMixer` | |
+| `audio/voices/instructor.js` | `status` field | `ready` is what `main.js` uses |
+| `instruments.js` | `role` on each instrument | never read |
+| `music/styles.js` | `PART_LABELS` | the labels are written in `index.html` |
+| `music/theory.js` | `isInScale`, `scaleMidis` | |
+| `music/rng.js` | `int` | |
+| `music/tune.js` | `export { partRange }` | still used inside the file |
+| `audio/scheduler.js` | defaults `bpm = 116`, `medley = true` | always overwritten at once by `main.js`. Keep the fields, set neutral defaults (`medley = false`). |
+
+`midiToNote` and `noteToMidi` are used only by tests, but they make those
+tests readable. Keep them.
+
+### 4.10 Tests for the scheduler
+
+A new test file drives the scheduler with a fake engine:
+- a `ctx` whose `currentTime` the test moves forward by hand;
+- voices that record `(id, event, when)`;
+- `fadeIn` and `fadeOut` that do nothing.
+
+The test calls `pump()` directly and stops the scheduler at the end so its
+timer doesn't keep the test process alive.
+
+It covers:
+- notes come out in tick order, at `start time + tick × seconds per tick`;
+- a tune loaded while playing takes over exactly on a bar line;
+- the medley prepares the next tune one loop early and hands over at the end
+  of the last repeat;
+- a disabled instrument books nothing;
+- the beats taken for the lamps match the beats booked;
+- after a simulated two-second stall, nothing is booked in the past, and
+  playback resumes at the right place in the tune (bug 2);
+- changing tempo mid-loop changes the spacing from the next tick.
+
+- **New** `test/scheduler.test.js`.
+
+### 4.11 Docs
+
+- `CODE.md`:
+  - file map: `original-plan.md` and the test fixture;
+  - §3.2 state shape (no `key` or `style`);
+  - §3.5 the stall rule;
+  - §3.7 the pluck `prepare` and the held-note helper;
+  - §3.9 short links;
+  - §5 "Make melodies sound better": rerun the fixture script when you
+    deliberately change the music;
+  - §6 the new test suites;
+  - §7: the background-tab bullet should mention that stalls are now skipped
+    rather than burst.
+- `README.md`: short links. Point to `original-plan.md` instead of
+  `plan.md`.
+
+## 5. Considered and rejected
+
+- **Moving the scheduler's timer into a Web Worker.** It's the standard fix
+  for background-tab throttling, but background playback already works and
+  §4.2 removes the worst symptom of a long stall. Not worth the extra file
+  and messaging.
+- **Stopping the animation loop while the music is stopped.** It costs almost
+  nothing, and the lamps need a few frames after Stop to switch off.
+- **Accessible tooltips for the instrument descriptions.** The `title`
+  attribute doesn't show on touch screens or to keyboard users. A proper
+  disclosure is a UI design change, not a clean-up, and the user asked for
+  mouseover specifically.
+- **Merging repeated descriptions** (for example, the bass texts are the same
+  for reels and jigs). It's data that a reader scans as a table. Sharing
+  entries would make it harder to edit one style without the other.
+- **Versioned links.** Only needed if links must survive changes to the
+  music. The fixture in §4.0 makes such changes deliberate. That's enough for
+  a site with two users.
+- **Making the plucked strings use the offline audio context like the other
+  voices.** Their string simulation already produces a buffer directly, so
+  routing it through an offline context would add work for no gain.
+
+## 6. Risks
+
+- **Accidentally changing what links play.** Mitigated by the fixture (§4.0),
+  which is written before any music file is touched.
+- **The held-note refactor changing the sound.** Mitigated by the offline
+  before/after comparison, and by listening in Firefox, the browser where the
+  crackle showed up.
+- **The stall skip misfiring on a slow machine.** The margin (50 ms) is half
+  the lookahead. A pump that runs a little late still books its notes
+  normally, a few milliseconds late as today. Only a real stall skips. The
+  scheduler test covers both cases.
+- **Resume on every Play (§4.3).** If the audio system can't resume, for
+  example because Safari refuses outside a click, `engine.start()` waits
+  forever on the play action. Space bar and click both count as user
+  gestures, so this shouldn't arise. Worth trying on an iPhone if one is to
+  hand.
+- **No Safari or phone testing so far.** Bugs 1 and 3 are most likely there.
+  The fixes are defensive, and correct whether or not the problem shows up.
+
+## 7. Files touched
+
+| File | Change |
+|---|---|
+| `original-plan.md` | renamed from `plan.md` (done) |
+| `js/main.js` | shared audio start-up; resume on every Play; simpler state set-up |
+| `js/state.js` | drop `key` and `style`; `initialState(link)`; short links |
+| `js/link.js` | short links; correct comment; import keys from theory |
+| `js/ui.js` | read style from the tune; use `loopBeats` |
+| `js/presets.js` | none (now covered by a test) |
+| `js/instruments.js` | drop `role` |
+| `js/audio/scheduler.js` | stall skip; `silent` ticks; inline beat queue; `loopBeats`; neutral defaults |
+| `js/audio/engine.js` | drop unused getter and method |
+| `js/audio/voices/prerender.js` | `createHeldNoteVoice`; `noiseBuffer` moves here |
+| `js/audio/voices/fiddle.js` | use the held-note helper |
+| `js/audio/voices/flute.js` | use the held-note helper; new `noiseBuffer` import |
+| `js/audio/voices/piano.js` | new `noiseBuffer` import |
+| `js/audio/voices/percussion.js` | `noiseBuffer` moved out |
+| `js/audio/voices/pluck.js` | `prepare` |
+| `js/audio/voices/instructor.js` | drop `status` |
+| `js/music/theory.js` | add `chordAt`, `KEY_FAMILIES`; drop `isInScale`, `scaleMidis` |
+| `js/music/tune.js` | import `chordAt`; drop `partRange` export |
+| `js/music/patterns.js` | import `chordAt` |
+| `js/music/styles.js` | drop `PART_LABELS` |
+| `js/music/rng.js` | drop `int` |
+| `scripts/record-golden.js` | new: rewrites the fixture |
+| `test/fixtures/tunes.json` | new: recorded tunes |
+| `test/golden.test.js` | new |
+| `test/scheduler.test.js` | new |
+| `test/presets.test.js` | new |
+| `test/link.test.js`, `test/state.test.js`, `test/tune.test.js` | updated as above |
+| `CODE.md`, `README.md` | updated as above |
 
 ## Todo
 
-### Phase 1: Project setup
-- [x] Create `package.json` declaring ES modules, with a test script that runs Node's built-in test runner
-- [x] Create the folder layout from section 5 (`css/`, `js/audio/voices/`, `js/music/`, `js/ui` files, `assets/voice/`, `scripts/`, `test/`)
-- [x] Write a skeleton `index.html` with placeholder regions for the transport row, beat lamps, phrase readout, preset row, and instrument grid, loading `js/main.js` as a module
-- [x] Write a stub `js/main.js` that logs on load, and confirm the page loads from a local static server
+### Phase 1: Safety nets
+- [x] Write `scripts/record-golden.js`: generate tunes and arrangements for every style, two keys each, a few fixed seeds, and write them to `test/fixtures/tunes.json`
+- [x] Run the script once on the current code and commit the fixture alongside it
+  - Note: the full output came to 2 MB. The fixture now stores one short line per note and two seeds per case, which brings it to about 480 KB. The case list lives in `scripts/golden.js`, shared by the script and the test.
+- [x] Write `test/golden.test.js`: regenerate the same tunes and arrangements and compare with the fixture
+- [x] Build the fake engine for scheduler tests (hand-moved clock, recording voices, no-op fades)
+- [x] Scheduler test: notes come out in tick order at the right times
+- [x] Scheduler test: a tune loaded while playing takes over on a bar line
+- [x] Scheduler test: medley prepares one loop early and hands over after the last repeat
+- [x] Scheduler test: a disabled instrument books nothing; beats taken match beats booked
+- [x] Scheduler test: a tempo change mid-loop changes spacing from the next tick
+- [x] Run `npm test`; all existing and new tests pass before any other change
 
-### Phase 2: Music foundations (pure logic, no audio)
-- [x] `js/music/rng.js`: seeded random number generator, plus helpers for picking an item, weighted picks, and random chance
-- [x] `js/music/styles.js`: the style table for reel, jig, and waltz (beats per bar, bars per part, lamps, melody grid, typical BPM band, swing allowed, medley repeats)
-- [x] `js/music/styles.js`: helpers that work out bar length and loop length in ticks
-- [x] `js/music/theory.js`: note names to and from pitch numbers, and keys (tonic and mode)
-- [x] `js/music/theory.js`: scales for major, dorian, and minor modes
-- [x] `js/music/theory.js`: chord tones for a scale degree and quality, nearest chord tone, and step up or down the scale
-- [x] `test/theory.test.js`: scales and chord tones for D, G, A major, and E dorian; the nearest-chord-tone and scale-step helpers
-- [x] `test/theory.test.js` (or a small styles test inside it): bar and loop tick lengths for all three styles (24 and 768, 24 and 768, 36 and 2,304)
+### Phase 2: Bug fixes
+- [x] Main: keep the audio start-up promise so every Play waits for the same start-up (§4.1)
+- [x] Main: resume the audio system on every Play that starts playback (§4.3)
+- [x] Scheduler: add the `silent` flag to `processTick` and the stall skip in `pump` (§4.2)
+- [x] Scheduler: inline the beat-queue limit in `pushBeat` and remove `push`
+  - Note: catching up tick by tick after a long stall would build and pre-render a medley tune for every loop nobody heard. So `pump` first jumps over whole loops at once (`skipWholeLoops`), then skips the remaining overdue ticks silently. A second test covers a ten-minute stall.
+  - Note: if the audio start-up fails, `ensureAudio` clears the shared promise so the next click can try again.
+- [x] Scheduler test: after a two-second stall nothing is booked in the past and playback resumes at the right place
+- [x] Links: make the key and tune number optional in `parseHash`; correct the header comment (§4.4)
+- [x] State: `applyLink` uses the preset's key and a random seed when they're missing
+- [x] Link tests: move short links out of the "ignored" list into a new short-link test
+- [x] Run `npm test`
 
-### Phase 3: Chord progressions and tune generation
-- [x] `js/music/progressions.js`: weighted 8-bar A-part and B-part templates for reels and jigs, including bars with two chords
-  - Note: in dorian and minor keys, some templates end the halfway phrase on the VII chord instead of V. VII is the usual "unresolved" chord in modal folk tunes. Section 2.5 only mentions V.
-- [x] `js/music/progressions.js`: weighted 16-bar A-part and B-part waltz templates, one chord per bar
-- [x] `js/music/tune.js`: tune skeleton — pick progressions from the seed, build the A and B parts as empty bars with chords, and record seed, style, and key
-- [x] `js/music/tune.js`: rhythm generator for reels (mostly four notes per beat, occasional merged notes and rolls, held note in the last bar)
-- [x] `js/music/tune.js`: rhythm generator for jigs (mostly three notes per beat, occasional long-short pairs, held note in the last bar)
-- [x] `js/music/tune.js`: rhythm generator for waltzes (one or two notes per beat, long-short pairs, half notes, a final note held for the whole bar)
-- [x] `js/music/tune.js`: pitch choice — chord tones on strong positions, scale steps toward the next chord tone on weak ones, rare leaps, range limits, B part higher than A part
-- [x] `js/music/tune.js`: 8-bar phrase structure for reels and jigs (motif, varied motif with half cadence, repeated motif, home-note ending)
-- [x] `js/music/tune.js`: 16-bar phrase structure for waltzes (4-bar motif, variation with half cadence, repeat, ending), with mostly stepwise motion
-- [x] `test/tune.test.js`: same seed gives the same tune; different seeds give different tunes
-- [x] `test/tune.test.js`: correct bar count per part for each style; every note within range and inside its bar
-- [x] `test/tune.test.js`: strong positions are chord tones; the last bar of each part ends on the home note; each style uses its own note grid
+### Phase 3: Plucked strings prepare ahead
+- [x] Add `prepare(events)` to the pluck voice, rendering every pitch the tune uses (§4.5)
+- [x] Check in the browser that guitar, banjo and bass still sound and that nothing logs errors
 
-### Phase 4: Accompaniment patterns
-- [x] `js/music/patterns.js`: shared helper that expands a tune into the AABB order with absolute ticks across the loop
-- [x] Fiddle pattern (melody as-is) and flute pattern (melody doubled, sometimes or always an octave up) for all styles
-- [x] Piano pattern: boom-chuck for reels and jigs, oom-pah-pah for waltzes
-- [x] Guitar pattern: down-up strums for reels, down-up-down for jigs, bass-strum-strum for waltzes, with strum direction recorded on each event
-- [x] Banjo pattern: bum-ditty for reels and jigs, quiet rolling arpeggio for waltzes
-- [x] Bass pattern: root and fifth with occasional walk-ups into chord changes for reels and jigs, one long note per bar for waltzes
-- [x] Bodhrán pattern for reels, jigs, and waltzes (accents on the beat; soft stroke and brushes in a waltz)
-- [x] Feet pattern for reels, jigs, and waltzes (heel and toe taps)
-- [x] Instructor pattern: one count per beat, cycling 1–4, or 1–3 in a waltz, with count 1 louder
-- [x] `test/patterns.test.js`: every pattern for every style stays within the loop and is sorted by tick
-- [x] `test/patterns.test.js`: piano bass on beats and chords on off-beats in reels and jigs; waltz bass on beat 1 and chords on beats 2 and 3
-- [x] `test/patterns.test.js`: drum accents on beats; instructor gives 64 counts cycling 1–4, or 192 counts cycling 1–3 in a waltz
+### Phase 4: One source of truth for key and style
+- [x] State: drop `key` and `style` from `presetFields` and `applyLink`; `withNewTune` reads the tune's style (§4.6)
+- [x] State: `initialState` takes an optional link; main uses it instead of discarding a random tune
+- [x] Main: medley callback updates only `tune`
+- [x] UI: read the style from the tune in `render` and `idlePosition`
+- [x] State test: assert on the tune's key instead of `change.key`
+- [x] Run `npm test`, including the fixture test
 
-### Phase 5: Audio engine and scheduler
-- [x] `js/audio/engine.js`: create the audio system on demand and resume it on a user click
-- [x] `js/audio/engine.js`: master chain — master volume, compressor, and output
-- [x] `js/audio/engine.js`: shared reverb with an echo generated in code, and a send level from each instrument
-- [x] `js/audio/engine.js`: per-instrument volume controls with the squared volume curve, and 20 ms fades for mute and unmute
-- [x] `js/audio/scheduler.js`: lookahead loop (25 ms wake-ups, 100 ms ahead) that converts ticks to audio time at the current BPM
-- [x] `js/audio/scheduler.js`: walk each enabled instrument's event list, wrap at the loop boundary, and skip disabled instruments
-- [x] `js/audio/scheduler.js`: swing on off-notes for reels only
-- [x] `js/audio/scheduler.js`: beat queue for the UI (audio time, lamp number, part, beat or bar position), using the style's lamp count
-- [x] `js/audio/scheduler.js`: swap in a queued tune at the next bar line (new tune or preset change), restarting at A1 beat 1
-- [x] `js/audio/scheduler.js`: medley swap at the loop boundary after the style's repeat count
-- [x] Temporary test voice (a simple beep) so the scheduler can be heard and timed before real voices exist
+### Phase 5: Small duplications
+- [x] Move `chordAt` into `theory.js`; use it from `tune.js`, `patterns.js` and `tune.test.js` (§4.8)
+- [x] Move `KEY_FAMILIES` into `theory.js`; update `state.js`, `link.js` and the tests that import it
+- [x] Use `loopBeats` in the UI's idle position and in the scheduler's beat record
+- [x] Move `noiseBuffer` into `prerender.js`; update the percussion, piano and flute imports
+- [x] Write `test/presets.test.js`: mixers cover exactly the registered instruments; styles and keys are valid; each key is in its mode's family
+- [x] Run `npm test`, including the fixture test
 
-### Phase 6: Instrument voices
-- [x] `js/audio/voices/fiddle.js`: detuned sawtooth oscillators, body-resonance filters, bow attack, delayed vibrato
-- [x] `js/audio/voices/flute.js`: sine and triangle tone, breath noise at the start, gentle vibrato
-- [x] `js/audio/voices/piano.js`: slightly out-of-tune decaying partials, hammer click, chord support
-- [x] `js/audio/voices/pluck.js`: plucked-string rendering into a buffer, cached per pitch and settings
-- [x] `js/audio/voices/pluck.js`: guitar configuration, including the 10–15 ms strum spread and up or down direction
-- [x] `js/audio/voices/pluck.js`: banjo and bass configurations
-- [x] `js/audio/voices/percussion.js`: bodhrán (falling-pitch thump plus noise; quieter, higher off-beat strokes; brush sound)
-- [x] `js/audio/voices/percussion.js`: feet (heel thump and toe click)
+### Phase 6: Dead code
+- [x] Engine: remove the `started` getter and `setMixer` (§4.9)
+- [x] Instructor: remove the `status` field
+- [x] Instruments: remove `role`
+- [x] Music: remove `PART_LABELS`, `isInScale`, `scaleMidis`, the rng's `int`, and the `partRange` export
+- [x] Scheduler: neutral defaults (`medley = false`)
+- [x] Grep for any remaining references; run `npm test`
 
-### Phase 7: Instructor voice clips
-- [x] Choose the text-to-speech voice (Piper with a permissive voice, or espeak-ng as a fallback) and confirm its license allows redistributing the output
-  - Note: used the espeak-ng fallback (American English voice). Piper wasn't installed and needs a separate voice-model download. espeak-ng is GPL-3.0, which covers the program, not the audio it produces, so the clips can be redistributed. Piper would sound more natural; the script can be swapped later.
-- [x] `scripts/make-voice.sh`: generate "one" through "four", trim the starting silence, keep each clip under 350 ms, and export Ogg and M4A copies
-- [x] `scripts/make-voice.sh`: measure and print each clip's timing offset (where the vowel starts)
-- [x] Run the script and commit the eight files in `assets/voice/`
-  - Note: the files are generated and saved in `assets/voice/`, but not committed to git, since no commit was requested.
-- [x] `js/audio/voices/instructor.js`: load and decode the clips (Ogg, with M4A fallback for Safari), and report when they are unavailable
-- [x] `js/audio/voices/instructor.js`: play the right clip with its timing offset, fading it out early if it would overlap the next count
+### Phase 7: Fiddle and flute share the held-note logic
+- [x] Recreate the offline comparison harness in the scratchpad and record fiddle and flute phrases on the current code
+- [x] Add `createHeldNoteVoice` to `prerender.js` (§4.7)
+- [x] Rewrite `fiddle.js` to use it, keeping its tone recipe and live envelope
+- [x] Rewrite `flute.js` to use it, keeping its tone recipe, breath and live envelope
+- [x] Rerun the comparison; loudness matches within breath noise
+- [x] Listen in Firefox: play each preset for a few minutes, with no crackle and no console errors
+  - Note: checked in headless Firefox: jig, waltz and reel presets played with no errors and evenly stepping lamps. Claude can't hear, so the by-ear check for crackle is left to the user.
 
-### Phase 8: Instruments, presets, and state
-- [x] `js/icons.js`: nine single-color SVG icons (fiddle, flute, piano, guitar, banjo, upright bass, bodhrán, feet, instructor)
-- [x] `js/instruments.js`: registry connecting each instrument's name, role, icon, voice, and pattern
-- [x] `js/presets.js`: the six presets from section 2.4, with mixer settings and volumes
-- [x] `js/state.js`: store with get, update, and subscribe; build the initial state from the default preset
-- [x] `js/state.js`: apply a preset (style, key, BPM, swing, mixer, new tune); switch to "Custom" when the user changes something
-- [x] `js/state.js`: new-tune and next-medley-tune actions
-
-### Phase 9: User interface
-- [x] `css/style.css`: base layout, color themes (light and dark), typography, and button and slider styles
-- [x] `css/style.css`: lamp styles (off, lit with glow and fade, larger lamp 1, faint hollow ring for disabled lamp 4)
-- [x] `css/style.css`: instrument card grid (three across on desktop, two on phones), dimmed off state, icon pulse, unavailable state
-- [x] `js/ui.js`: transport row — Play/Stop (creates the audio system on first click), New Tune, BPM slider and number, master volume, medley checkbox, spacebar shortcut
-- [x] `js/ui.js`: BPM slider's typical band, which moves with the style
-- [x] `js/ui.js`: preset cards with active and "Custom" highlighting
-- [x] `js/ui.js`: instrument cards — icon toggle reporting on or off, name, volume slider, connected to state and engine
-- [x] `js/ui.js`: screen-refresh loop that lights lamps from the beat queue against the audio clock, and pulses instrument icons when they play
-- [x] `js/ui.js`: phrase readout (A1 · A2 · B1 · B2 highlight; "beat N / 64", or "bar N / 16" in a waltz) and enabling or disabling lamp 4 on style change
-- [x] `js/main.js`: connect state, UI, engine, and scheduler; remove the temporary test voice
-- [x] Accessibility pass: labels on every control, toggle states announced, disabled lamp hidden from screen readers, keyboard-only walkthrough
-
-### Phase 10: Listening, tuning, and browser checks
-- [x] Listen to each preset and adjust melody rule weights in the tune generator
-  - Note: not done by ear. I can't listen to audio in this environment. Instead I checked the generated melodies on paper (motif repeats, half cadences, home-note endings all appear as intended), and tests enforce the structural rules. The weights in the tune generator's rule table are untouched and still need a listening pass.
-- [x] Adjust the waltz rules and the fiddle's vibrato on held notes
-  - Note: same limitation; the waltz output was inspected as note names only. Vibrato settings are as first written and need a listening pass.
-- [x] Balance the default volumes and reverb levels across all presets
-  - Note: done by measurement rather than by ear. Each instrument was rendered offline in the browser and its loudness measured. Guitar and banjo were 10–12 dB quieter than the fiddle and bass about 7 dB quieter, so their trims went up; bodhrán and feet came down. Rhythm instruments now sit 5–6 dB under the fiddle, all six preset mixes are within about 2.5 dB of each other, and no mix peaks above −7 dB before the compressor. Reverb levels are unchanged.
-- [x] Tune the instructor clips' timing offsets by ear at 70, 100, and 140 BPM
-  - Note: done by measurement. In the browser, the vowel of "one" landed 15 ms early; its offset was corrected. All four counts now land on the beat at 70, 100, and 140 BPM.
-- [x] Check timing while playing: tempo changes, mute and unmute, New Tune, preset switches between waltz and reel, and medley handover
-  - Note: checked with a fake audio clock in Node (exact 0.5 s beats at 120 BPM, tempo change mid-beat, waltz swap at a bar line, medley handover after two waltz loops) and live in headless Firefox (lamps and readout, reel-to-waltz switch, New Tune at the bar line, Stop and restart, turning the instructor on).
-- [x] Test in Chrome, Firefox, Safari, and Edge, and on a mid-range phone, checking timing and processing load
-  - Note: only Firefox (headless, desktop and 390 px phone width) was tested. Chrome and Edge aren't installed, and Safari and a real phone couldn't be driven from here. Safari is the most important remaining check, especially for the M4A fallback of the count clips.
-- [x] Check background-tab behavior and note any dropouts
-  - Note: not testable headlessly; confirmed by hand on 2026-11-13: playback continues fine in a background tab.
-
-### Phase 11: Documentation
-- [x] `README.md`: what the site is, how to run it locally, how to run the tests, and how to regenerate the voice clips
-- [x] `README.md`: short guide to contra terms (reel, jig, waltz, AABB, 64 beats, boom-chuck)
-
-### Phase 12: Follow-up changes (after first review)
-- [x] Add a metronome instrument: a click on every beat, accented on beat 1, with its own icon, toggle, and volume; off in all presets
-- [x] Test that the metronome clicks once per beat with the accent where lamp 1 lights, in every style
-- [x] Measure the metronome's level in the browser (its peaks match the bodhrán and feet)
-- [x] Remove the Beginner Walk-Through preset (five presets remain)
-- [x] Lay out the ten instrument cards five across on desktop, two across on smaller screens
-- [x] Add an inline page icon, so browsers stop requesting a missing favicon file (it was showing up as a 404 in the server log)
-- [x] Default medley mode to off (the checkbox starts unchecked)
-- [x] Remove the instrument-icon pulse animation (it left small rendering artifacts in Firefox), and the scheduler's per-note tracking that only fed it
-- [x] Click the beat display to cover or uncover it (a solid panel over the lamps and readout, same size, so nothing shifts); a corner Hide/Show button does the same from the keyboard
-- [x] New tune (and the medley) moves to a different key of the same kind each time; tests check the key always changes and stays in its family
-- [x] Give each backing instrument two or three rhythm patterns per style, picked per part from the tune's seed; tests check every pattern gets used and that the backing actually varies
-- [x] Re-measure: over 500 new waltz tunes the piano now plays about 230 different parts (16 before) in 9 different rhythms (1 before)
-- [x] Shareable tune links: the address bar holds `#preset-or-style/key/tune-number`, and opening it plays the same tune (this was listed under future work)
-- [x] Metronome: the same click on every beat, with no accent on beat 1 (changed at the user's request; section 2.3 above describes the original accented version)
-- [x] Each instrument card shows the pattern it's playing in the current tune, with a tooltip describing it; a test checks every rhythm variant has a description
-- [x] Fix crackling after several minutes of play in Firefox: notes are pre-rendered once per pitch (OfflineAudioContext, same sound recipe) and replayed with two live nodes, and finished nodes are disconnected straight away. Measured: same loudness (within 0.3 dB); live nodes per second down from 115 to 15 for the piano, 51 to 14 for the flute, 29 to 14 for the fiddle, about half for the percussion. Deviation: pre-rendered fiddle notes use one fixed brightness rather than varying slightly with velocity.
+### Phase 8: Docs and wrap-up
+- [x] `CODE.md`: file map, state shape, stall rule, pluck `prepare`, held-note helper, short links, fixture script, new test suites, background-tab note (§4.11)
+- [x] `README.md`: short links; point to `original-plan.md`
+- [x] Final `npm test` and a full-page browser check (play, New tune, change preset, medley handover, open a short link)

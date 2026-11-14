@@ -40,10 +40,6 @@ export class AudioEngine {
     this.settings = { master: 0.8, mixer: {} };
   }
 
-  get started() {
-    return this.ctx !== null;
-  }
-
   // Must be called from a user click: browsers block audio until then.
   async start() {
     if (!this.ctx) this.build();
@@ -105,10 +101,6 @@ export class AudioEngine {
   setChannel(id, { enabled, volume }) {
     this.settings.mixer[id] = { enabled, volume };
     if (this.ctx && this.channels[id]) rampTo(this.ctx, this.channels[id].gain, this.channelGain(id));
-  }
-
-  setMixer(mixer) {
-    for (const [id, setting] of Object.entries(mixer)) this.setChannel(id, setting);
   }
 
   fadeIn() {

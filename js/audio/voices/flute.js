@@ -1,14 +1,10 @@
 // Synthesized wooden flute: a mostly pure tone with a little edge, a puff of
 // breath noise at the start of each note, and gentle vibrato on long notes.
 //
-// Each pitch (attack, breath puff, then an endless sustain) is pre-rendered
-// once and replayed, with the note's length and release applied live; see
-// prerender.js.
+// Notes (attack, breath puff, endless sustain) are pre-rendered and replayed
+// by createHeldNoteVoice (prerender.js).
 import { midiToFreq } from '../../music/theory.js';
-import { noiseBuffer } from './percussion.js';
-import {
-  createRenderCache, playBuffer, releaseWhenDone, longestByPitch, TEMPO_MARGIN,
-} from './prerender.js';
+import { createHeldNoteVoice, releaseWhenDone, noiseBuffer } from './prerender.js';
 
 const ATTACK = 0.04;
 const RELEASE = 0.06;
@@ -76,23 +72,18 @@ export function createFluteVoice(ctx, output) {
   tone.frequency.value = 4000;
   tone.connect(output);
 
-  const cache = createRenderCache(ctx);
-
   // Rendered at velocity 1: LEVEL and BREATH are applied by the live gain.
-  function request(midi, dur) {
-    const seconds = (dur + RELEASE + 0.02) * TEMPO_MARGIN;
+  function renderNote(c, out, midi, seconds) {
     const freq = midiToFreq(midi);
-    cache.request(midi, seconds, (c, out) => {
-      const env = c.createGain();
-      env.gain.setValueAtTime(0, 0);
-      env.gain.linearRampToValueAtTime(1, ATTACK);
-      env.connect(out);
-      pipeTone(c, env, { freq, when: 0, stopAt: seconds, vibratoRamp: VIBRATO_RAMP });
-      breathPuff(c, out, { freq, when: 0, level: BREATH / LEVEL });
-    });
+    const env = c.createGain();
+    env.gain.setValueAtTime(0, 0);
+    env.gain.linearRampToValueAtTime(1, ATTACK);
+    env.connect(out);
+    pipeTone(c, env, { freq, when: 0, stopAt: seconds, vibratoRamp: VIBRATO_RAMP });
+    breathPuff(c, out, { freq, when: 0, level: BREATH / LEVEL });
   }
 
-  // The original, fully live note: used for short notes and until a buffer is ready.
+  // The original, fully live note.
   function playLive(ev, when, dur) {
     const attack = Math.min(ATTACK, dur * 0.4);
     const end = when + dur + RELEASE;
@@ -111,33 +102,7 @@ export function createFluteVoice(ctx, output) {
     breathPuff(ctx, tone, { freq, when, level: BREATH * ev.velocity });
   }
 
-  return {
-    prepare(events, secondsPerTick) {
-      for (const [midi, ticks] of longestByPitch(events)) {
-        const dur = ticks * secondsPerTick;
-        if (dur >= SHORTEST_PRERENDERED) request(midi, dur);
-      }
-    },
-
-    play(ev, when, secondsPerTick) {
-      const dur = Math.max(0.03, ev.durationTicks * secondsPerTick);
-      if (dur < SHORTEST_PRERENDERED) {
-        playLive(ev, when, dur);
-        return;
-      }
-      const buffer = cache.get(ev.midi, dur + RELEASE + 0.02);
-      if (!buffer) {
-        request(ev.midi, dur);
-        playLive(ev, when, dur);
-        return;
-      }
-      const level = LEVEL * ev.velocity;
-      const end = when + dur + RELEASE;
-      playBuffer(ctx, tone, buffer, when, end + 0.02, (gain) => {
-        gain.setValueAtTime(level, when);
-        gain.setValueAtTime(level, when + dur);
-        gain.linearRampToValueAtTime(0, end);
-      });
-    },
-  };
+  return createHeldNoteVoice(ctx, tone, {
+    level: LEVEL, release: RELEASE, shortest: SHORTEST_PRERENDERED, renderNote, playLive,
+  });
 }

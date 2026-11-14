@@ -2,13 +2,10 @@
 // bowed string) shaped by fixed filters that imitate a violin body's
 // resonances, with a soft bow attack and vibrato that fades in on long notes.
 //
-// Each pitch's bowed tone (attack, then an endless sustain) is pre-rendered
-// once and replayed, with the note's length and release applied live; see
-// prerender.js. The body filters are shared by all notes and stay live.
+// Notes are pre-rendered and replayed by createHeldNoteVoice (prerender.js).
+// The body filters are shared by all notes and stay live.
 import { midiToFreq } from '../../music/theory.js';
-import {
-  createRenderCache, playBuffer, releaseWhenDone, longestByPitch, TEMPO_MARGIN,
-} from './prerender.js';
+import { createHeldNoteVoice, releaseWhenDone } from './prerender.js';
 
 const BODY_RESONANCES = [
   // [frequency Hz, Q, gain dB]
@@ -82,24 +79,7 @@ export function createFiddleVoice(ctx, output) {
   node.connect(air);
   air.connect(output);
 
-  const cache = createRenderCache(ctx);
-
-  // Attack and settle at full scale, then sustain until the buffer ends.
-  function request(midi, dur) {
-    const seconds = (dur + RELEASE + 0.02) * TEMPO_MARGIN;
-    cache.request(midi, seconds, (c, out) => {
-      const env = c.createGain();
-      env.gain.setValueAtTime(0, 0);
-      env.gain.linearRampToValueAtTime(1, ATTACK);
-      env.gain.linearRampToValueAtTime(0.8, ATTACK + SETTLE);
-      env.connect(out);
-      bowedTone(c, env, {
-        freq: midiToFreq(midi), cutoff: brightness(0.8), when: 0, stopAt: seconds, vibratoRamp: VIBRATO_RAMP,
-      });
-    });
-  }
-
-  // The original, fully live note: used for short notes and until a buffer is ready.
+  // The original, fully live note.
   function playLive(ev, when, dur) {
     const attack = Math.min(ATTACK, dur * 0.3);
     const peak = LEVEL * ev.velocity;
@@ -121,33 +101,19 @@ export function createFiddleVoice(ctx, output) {
     releaseWhenDone(first, ...nodes, env);
   }
 
-  return {
-    prepare(events, secondsPerTick) {
-      for (const [midi, ticks] of longestByPitch(events)) {
-        const dur = ticks * secondsPerTick;
-        if (dur >= SHORTEST_PRERENDERED) request(midi, dur);
-      }
-    },
+  // Attack and settle at full scale, then sustain until the buffer ends.
+  function renderNote(c, out, midi, seconds) {
+    const env = c.createGain();
+    env.gain.setValueAtTime(0, 0);
+    env.gain.linearRampToValueAtTime(1, ATTACK);
+    env.gain.linearRampToValueAtTime(0.8, ATTACK + SETTLE);
+    env.connect(out);
+    bowedTone(c, env, {
+      freq: midiToFreq(midi), cutoff: brightness(0.8), when: 0, stopAt: seconds, vibratoRamp: VIBRATO_RAMP,
+    });
+  }
 
-    play(ev, when, secondsPerTick) {
-      const dur = Math.max(0.03, ev.durationTicks * secondsPerTick);
-      if (dur < SHORTEST_PRERENDERED) {
-        playLive(ev, when, dur);
-        return;
-      }
-      const buffer = cache.get(ev.midi, dur + RELEASE + 0.02);
-      if (!buffer) {
-        request(ev.midi, dur);
-        playLive(ev, when, dur);
-        return;
-      }
-      const level = LEVEL * ev.velocity;
-      const end = when + dur + RELEASE;
-      playBuffer(ctx, input, buffer, when, end + 0.02, (gain) => {
-        gain.setValueAtTime(level, when);
-        gain.setValueAtTime(level, when + dur);
-        gain.linearRampToValueAtTime(0, end);
-      });
-    },
-  };
+  return createHeldNoteVoice(ctx, input, {
+    level: LEVEL, release: RELEASE, shortest: SHORTEST_PRERENDERED, renderNote, playLive,
+  });
 }
